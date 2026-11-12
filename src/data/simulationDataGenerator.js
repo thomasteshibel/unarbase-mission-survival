@@ -1,4 +1,4 @@
-const SCENARIOS = [
+export const SCENARIOS = Object.freeze([
   {
     day: 1,
     id: 'nominal-operations',
@@ -70,15 +70,33 @@ const SCENARIOS = [
     radiationIndex: 32,
     surfaceTemperatureC: 75
   }
-];
+]);
 
-export function getScenarioForDay(day = 1) {
-  const scheduled = SCENARIOS.find((scenario) => scenario.day === day) ?? SCENARIOS[0];
+export function createScenarioSchedule(seed = 0) {
+  const scheduledEvents = SCENARIOS.slice(1).map((scenario) => ({ ...scenario }));
+  if (seed !== 0) {
+    let state = seed >>> 0;
+    for (let index = scheduledEvents.length - 1; index > 0; index -= 1) {
+      state = (Math.imul(state, 1664525) + 1013904223) >>> 0;
+      const swapIndex = state % (index + 1);
+      [scheduledEvents[index], scheduledEvents[swapIndex]] = [scheduledEvents[swapIndex], scheduledEvents[index]];
+    }
+  }
+  return [
+    { ...SCENARIOS[0] },
+    ...scheduledEvents.map((scenario, index) => ({ ...scenario, day: index + 2 }))
+  ];
+}
+
+export function getScenarioForDay(day = 1, scenarioSchedule = null) {
+  const scheduled = scenarioSchedule?.find((scenario) => scenario.day === day) ??
+    SCENARIOS.find((scenario) => scenario.day === day) ??
+    SCENARIOS[0];
   return { ...scheduled };
 }
 
-export function generateMissionConditions(day = 1, difficulty = 'Standard', equipment = {}) {
-  const scenario = getScenarioForDay(day);
+export function generateMissionConditions(day = 1, difficulty = 'Standard', equipment = {}, scenarioSchedule = null) {
+  const scenario = getScenarioForDay(day, scenarioSchedule);
   const difficultyFactor = {
     Training: 0.8,
     Standard: 1,

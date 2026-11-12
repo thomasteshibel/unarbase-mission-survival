@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { DATA_MODES, getActiveDataSet, isNASADataModeAvailable, setDataMode } from '../src/data/dataConfig.js';
 import { normalizeMeasurements } from '../src/data/dataNormalizer.js';
-import { getScenarioForDay, generateMissionConditions } from '../src/data/simulationDataGenerator.js';
+import { createScenarioSchedule, getScenarioForDay, generateMissionConditions } from '../src/data/simulationDataGenerator.js';
 import { adaptNASAData } from '../src/data/nasaDataAdapter.js';
 import { getDailyResourceNeeds, applyDailyResources } from '../src/simulation/resourceSystem.js';
 import { createEmergencyEvent } from '../src/simulation/emergencySystem.js';
@@ -15,6 +15,17 @@ test('daily scenario generation is deterministic and identifies assumptions', ()
   assert.equal(first.scenario.durationDays, 1);
   assert.match(first.scenario.trigger, /62%/);
   assert.ok(first.solarGeneration > 0 && first.solarGeneration < 105);
+});
+
+test('scenario seeds reproducibly vary event order without changing event causes', () => {
+  const firstSchedule = createScenarioSchedule(1456);
+  const replaySchedule = createScenarioSchedule(1456);
+  const alternateSchedule = createScenarioSchedule(98765);
+  assert.deepEqual(firstSchedule, replaySchedule);
+  assert.notDeepEqual(firstSchedule.map((scenario) => scenario.id), alternateSchedule.map((scenario) => scenario.id));
+  assert.equal(firstSchedule[0].id, 'nominal-operations');
+  assert.equal(firstSchedule.length, 7);
+  assert.ok(firstSchedule.every((scenario, index) => scenario.day === index + 1 && scenario.trigger));
 });
 
 test('resource needs use consistent crew-day units and respond to activity and recovery', () => {

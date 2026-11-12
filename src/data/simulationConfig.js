@@ -20,7 +20,8 @@ export const SIMULATION_PROFILE = {
     'Oxygen, water, food, and energy inventories are scenario-design choices for a seven-day classroom exercise, not specifications for a flight habitat.',
     'Habitat pressure (101.3 kPa) and cabin temperature (21 °C) are illustrative control targets. Exterior surface temperatures are day-level scenario estimates and are not cabin temperatures.',
     'Radiation is shown as a dimensionless relative risk index, not dose, a forecast, or a measured lunar radiation value. Health effects are intentionally simplified.',
-    'Crew fatigue is a 0–100 educational index. High fatigue increases modeled activity demand and can add a small health penalty; it is not a physiological prediction.'
+    'Crew fatigue is a 0–100 educational index. High fatigue increases modeled activity demand and can add a small health penalty; it is not a physiological prediction.',
+    'Crew specialist skills are illustrative indices. Flight-engineer expertise can reduce selected modeled repair power costs by up to 25%; this is a game mechanic, not measured repair performance.'
   ],
   mission: {
     durationDays: 7,
@@ -43,10 +44,30 @@ export const SIMULATION_PROFILE = {
     }
   },
   astronauts: [
-    { name: 'Ava Chen', role: 'Mission Commander' },
-    { name: 'Leo Park', role: 'Flight Engineer' },
-    { name: 'Maya Ortiz', role: 'Medical Officer' },
-    { name: 'Noah Singh', role: 'Science Officer' }
+    {
+      name: 'Ava Chen',
+      role: 'Mission Commander',
+      profile: 'Coordinates operations and confirms that the crew understands the current plan.',
+      skills: { missionPlanning: 0.9 }
+    },
+    {
+      name: 'Leo Park',
+      role: 'Flight Engineer',
+      profile: 'Diagnoses habitat equipment faults and supports subsystem repair decisions.',
+      skills: { systemsTroubleshooting: 0.9 }
+    },
+    {
+      name: 'Maya Ortiz',
+      role: 'Medical Officer',
+      profile: 'Monitors crew workload and supports health and rest procedures.',
+      skills: { crewCare: 0.9 }
+    },
+    {
+      name: 'Noah Singh',
+      role: 'Science Officer',
+      profile: 'Tracks environmental observations and records mission measurements.',
+      skills: { environmentalMonitoring: 0.9 }
+    }
   ]
 };
 
@@ -56,6 +77,7 @@ export const DEFAULT_CONFIG = {
   days: 7,
   crew: 4,
   difficulty: 'Standard',
+  scenarioSeed: 0,
   initialResources: { ...SIMULATION_PROFILE.mission.initialResources },
   modelParameters: { ...DEFAULT_MODEL_PARAMETERS }
 };

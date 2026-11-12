@@ -1,11 +1,20 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { advanceMission, createMission, resolveEmergencyChoice, updateMissionModelParameters } from '../src/simulation/missionEngine.js';
+import {
+  advanceMission,
+  advanceMissionStep,
+  createMission,
+  resolveEmergencyChoice,
+  setMissionPaused,
+  updateMissionModelParameters
+} from '../src/simulation/missionEngine.js';
+import { validateMissionState } from '../src/data/dataValidator.js';
 
 function advanceWithScenarioResponse(mission) {
   if (mission.emergency) {
     resolveEmergencyChoice(mission, mission.emergency.options[0].id);
   }
+  if (mission.operationStage === 'briefing') advanceMissionStep(mission);
   return advanceMission(mission, 'normal');
 }
 
@@ -15,6 +24,42 @@ test('mission engine creates a valid starting state with four astronauts', () =>
   assert.equal(mission.crew, 4);
   assert.equal(mission.astronauts.length, 4);
   assert.equal(mission.status, 'active');
+  assert.equal(mission.operationStage, 'briefing');
+  assert.equal(mission.paused, false);
+});
+
+test('mission operation step is explicit and does not consume resources', () => {
+  const mission = createMission({ days: 7, crew: 4, difficulty: 'Standard' });
+  const startingResources = { ...mission.resources };
+
+  advanceMissionStep(mission);
+
+  assert.equal(mission.operationStage, 'operations');
+  assert.deepEqual(mission.resources, startingResources);
+  assert.throws(() => advanceMissionStep(mission), /already in its operations step/);
+  assert.throws(() => advanceMission(createMission()), /Begin the current day/);
+});
+
+test('pause blocks manual steps and mission days until resumed', () => {
+  const mission = createMission();
+  setMissionPaused(mission, true);
+
+  assert.throws(() => advanceMissionStep(mission), /Resume the mission/);
+  assert.throws(() => advanceMission(mission), /Resume the mission/);
+
+  setMissionPaused(mission, false);
+  advanceMissionStep(mission);
+  assert.equal(mission.operationStage, 'operations');
+});
+
+test('mission state rejects invalid scenario seeds and schedules', () => {
+  const mission = createMission();
+  mission.scenarioSeed = -1;
+  assert.throws(() => validateMissionState(mission), /unsigned 32-bit integer/);
+
+  mission.scenarioSeed = 0;
+  mission.scenarioSchedule[2].day = 1;
+  assert.throws(() => validateMissionState(mission), /seven ordered, described day entries/);
 });
 
 test('new mission accepts validated starting inventories and model assumptions', () => {
@@ -59,6 +104,7 @@ test('model updates affect upcoming mission calculations and reject invalid rate
   assert.throws(() => updateMissionModelParameters(mission, { oxygenLitersPerPersonDay: 1201 }), /between 100 and 1200/);
 
   if (updated.emergency) resolveEmergencyChoice(updated, updated.emergency.options[0].id);
+  advanceMissionStep(updated);
   advanceMission(updated);
   const latest = updated.history.at(-1);
   assert.equal(latest.oxygenUse, 1442);
@@ -104,6 +150,7 @@ test('mission scenarios are repeatable and report their trigger and duration', (
 test('mission cannot advance past an unresolved active scenario', () => {
   const mission = createMission({ days: 7, crew: 4, difficulty: 'Standard' });
   mission.day = 2;
+  mission.operationStage = 'operations';
   mission.emergency = { options: [{ id: 'response' }] };
   assert.throws(() => advanceMission(mission), /Resolve the active mission scenario/);
 });
@@ -113,6 +160,8 @@ test('high crew fatigue raises modeled oxygen demand and affects the health inde
   const fatigued = createMission({ days: 3, crew: 4, difficulty: 'Standard' });
   rested.emergency = null;
   fatigued.emergency = null;
+  advanceMissionStep(rested);
+  advanceMissionStep(fatigued);
   fatigued.astronauts.forEach((astronaut) => { astronaut.fatigue = 80; });
 
   advanceMission(rested);
@@ -133,6 +182,23 @@ test('a solar-array response changes scenario generation and has a measurable co
   assert.ok(mission.resources.power < reserveBeforeResponse);
 });
 
+test('flight-engineer skill reduces selected repair power cost without advancing mission time', () => {
+  const expert = advanceWithScenarioResponse(createMission({ days: 7, crew: 4, difficulty: 'Standard' }));
+  const novice = structuredClone(expert);
+  novice.astronauts.forEach((astronaut) => { astronaut.skills.systemsTroubleshooting = 0; });
+  const expertPower = expert.resources.power;
+  const novicePower = novice.resources.power;
+
+  resolveEmergencyChoice(expert, 'inspect-array');
+  resolveEmergencyChoice(novice, 'inspect-array');
+
+  assert.equal(expert.day, 2);
+  assert.equal(novice.day, 2);
+  assert.equal(expert.resources.power, expertPower - 7);
+  assert.equal(novice.resources.power, novicePower - 8);
+  assert.match(expert.timeline.at(-1).detail, /troubleshooting skill reduced modeled repair power cost by 1 kWh/);
+});
+
 test('battery degradation reduces available reserve during the triggered day', () => {
   const mission = createMission({ days: 7, crew: 4, difficulty: 'Standard' });
   while (mission.day < 7) {
@@ -140,6 +206,7 @@ test('battery degradation reduces available reserve during the triggered day', (
   }
   const reserveBeforeDegradation = mission.resources.battery;
   resolveEmergencyChoice(mission, 'monitor-battery');
+  advanceMissionStep(mission);
   advanceMission(mission);
   assert.ok(mission.resources.battery < reserveBeforeDegradation);
   assert.ok(mission.resources.battery <= 210);
@@ -153,6 +220,7 @@ test('zero critical inventory at mission end produces a failure report', () => {
     initialResources: { oxygen: 0, water: 0, food: 0, power: 0, battery: 0 }
   });
 
+  advanceMissionStep(mission);
   advanceMission(mission);
 
   assert.equal(mission.status, 'failed');

@@ -1,5 +1,6 @@
 import { DEFAULT_CONFIG, DEFAULT_MODEL_PARAMETERS, MISSION_DIFFICULTIES, SIMULATION_PROFILE } from '../data/simulationConfig.js';
 import { getMissionData } from '../data/simulationDataProvider.js';
+import { createScenarioSchedule } from '../data/simulationDataGenerator.js';
 import { clampResource, validateInitialResources, validateMissionState, validateModelParameters } from '../data/dataValidator.js';
 import { addMissionLog, getDayLabel } from '../utils/formatting.js';
 import { applyDailyResources, createInitialResources, getDailyResourceNeeds } from './resourceSystem.js';
@@ -68,13 +69,28 @@ const SYSTEM_OVERRIDE_KEYS = new Set([
   'batteryCapacityFactor',
   'communicationsOverride'
 ]);
+const ENGINEERING_RESPONSE_IDS = new Set([
+  'inspect-array',
+  'repair-recycler',
+  'switch-relay',
+  'seal-oxygen-line',
+  'isolate-battery-string'
+]);
 
 export function createAstronautRoster(count = 4) {
   if (!Number.isInteger(count) || count < 1 || count > 4) {
     throw new RangeError('Crew size must be an integer from 1 to 4.');
   }
   return SIMULATION_PROFILE.astronauts
-    .map((astronaut) => ({ ...astronaut, health: 100, fatigue: 12, status: 'Ready' }))
+    .map((astronaut) => ({
+      ...astronaut,
+      skills: { ...astronaut.skills },
+      health: 100,
+      fatigue: 12,
+      activity: 'Monitoring habitat systems',
+      status: 'Ready',
+      condition: 'Nominal'
+    }))
     .slice(0, count);
 }
 
@@ -83,7 +99,7 @@ function getConditions(mission, day = mission.day) {
     ...mission.systems,
     ...mission.modelParameters,
     ...mission.conditionOverrides
-  });
+  }, mission.scenarioSchedule);
 }
 
 function applyConditionOverrides(mission) {
@@ -132,6 +148,11 @@ export function createMission(config = DEFAULT_CONFIG) {
   const duration = Number(config.days ?? 7);
   const crew = Number(config.crew ?? 4);
   const difficulty = config.difficulty ?? 'Standard';
+  const scenarioSeed = Number(config.scenarioSeed ?? 0);
+  if (!Number.isInteger(scenarioSeed) || scenarioSeed < 0 || scenarioSeed > 0xffffffff) {
+    throw new RangeError('Mission scenario seed must be an unsigned 32-bit integer.');
+  }
+  const scenarioSchedule = createScenarioSchedule(scenarioSeed);
   const modelParameters = {
     ...DEFAULT_MODEL_PARAMETERS,
     ...config.modelParameters
@@ -148,9 +169,12 @@ export function createMission(config = DEFAULT_CONFIG) {
     throw new RangeError(`Unsupported mission difficulty: ${difficulty}`);
   }
   const mission = {
-    simulationVersion: 3,
+    simulationVersion: 4,
     day: 1,
     duration,
+    scenarioSeed,
+    scenarioSchedule,
+    operationStage: 'briefing',
     crew,
     difficulty,
     status: 'active',
@@ -180,9 +204,40 @@ export function createMission(config = DEFAULT_CONFIG) {
     timeline: [{ day: 1, title: 'Mission launched', detail: 'Habitat systems online; crew briefing complete.' }]
   };
   applyConditionOverrides(mission);
-  mission.emergency = createEmergencyEvent(1, mission.difficulty);
+  mission.emergency = createEmergencyEvent(1, mission.difficulty, mission.scenarioSchedule);
   recordHistory(mission);
   mission.phase = getMissionPhase(mission);
+  return validateMissionState(mission);
+}
+
+export function setMissionPaused(mission, paused) {
+  if (typeof paused !== 'boolean') {
+    throw new TypeError('Mission pause state must be a boolean.');
+  }
+  if (mission.status !== 'active') {
+    throw new Error('A completed mission cannot be paused or resumed.');
+  }
+  mission.paused = paused;
+  return validateMissionState(mission);
+}
+
+export function advanceMissionStep(mission) {
+  if (mission.status !== 'active') {
+    throw new Error('A completed mission cannot advance to another operation step.');
+  }
+  if (mission.paused) {
+    throw new Error('Resume the mission before advancing an operation step.');
+  }
+  if (mission.operationStage !== 'briefing') {
+    throw new Error('The mission is already in its operations step; advance the mission day to continue.');
+  }
+  if (mission.emergency) {
+    throw new Error('Review and resolve the active event before beginning operations.');
+  }
+  mission.operationStage = 'operations';
+  const detail = `Day ${mission.day} briefing complete. Mission control explicitly began operations; no resources were consumed by this step.`;
+  mission.log = addMissionLog(mission.log, detail);
+  mission.timeline.push({ day: mission.day, title: `Day ${mission.day} operations started`, detail });
   return validateMissionState(mission);
 }
 
@@ -226,7 +281,17 @@ export function resolveEmergencyChoice(mission, optionId) {
     throw new Error(result.message);
   }
 
-  for (const [key, delta] of Object.entries(result.resourceDelta)) {
+  const resourceDelta = { ...result.resourceDelta };
+  const engineeringSkill = Math.max(
+    0,
+    ...mission.astronauts.map((astronaut) => Number(astronaut.skills?.systemsTroubleshooting ?? 0))
+  );
+  const powerDiscount = ENGINEERING_RESPONSE_IDS.has(optionId) && resourceDelta.power < 0
+    ? Math.min(-resourceDelta.power, Math.floor(-resourceDelta.power * engineeringSkill * 0.25))
+    : 0;
+  if (powerDiscount > 0) resourceDelta.power += powerDiscount;
+
+  for (const [key, delta] of Object.entries(resourceDelta)) {
     if (Object.hasOwn(mission.resources, key)) {
       mission.resources[key] = clampResource(Number(mission.resources[key]) + Number(delta));
     }
@@ -240,8 +305,12 @@ export function resolveEmergencyChoice(mission, optionId) {
   }
   mission.score = Math.max(0, mission.score + (result.missionDelta.score ?? 0));
   mission.responsePenalties += Math.max(0, -(result.missionDelta.score ?? 0));
-  mission.log = addMissionLog(mission.log, `${result.label}: ${result.message}`);
-  mission.timeline.push({ day: mission.day, title: result.label, detail: result.message });
+  const skillNote = powerDiscount > 0
+    ? ` The flight engineer’s troubleshooting skill reduced modeled repair power cost by ${powerDiscount} kWh.`
+    : '';
+  const detail = `${result.message}${skillNote}`;
+  mission.log = addMissionLog(mission.log, `${result.label}: ${detail}`);
+  mission.timeline.push({ day: mission.day, title: result.label, detail });
   mission.emergency = null;
   applyConditionOverrides(mission);
   mission.phase = getMissionPhase(mission);
@@ -250,6 +319,12 @@ export function resolveEmergencyChoice(mission, optionId) {
 
 export function advanceMission(mission, decisionId = 'normal') {
   if (mission.status === 'complete' || mission.status === 'failed') return mission;
+  if (mission.paused) {
+    throw new Error('Resume the mission before advancing the mission day.');
+  }
+  if (mission.operationStage !== 'operations') {
+    throw new Error('Begin the current day’s operations before advancing the mission day.');
+  }
   if (mission.emergency) {
     throw new Error('Resolve the active mission scenario before advancing the day.');
   }
@@ -295,6 +370,14 @@ export function advanceMission(mission, decisionId = 'normal') {
     (averageCrewValue(mission.astronauts, 'fatigue') >= 70 ? 1 : 0)
   );
   for (const astronaut of mission.astronauts) {
+    astronaut.activity = {
+      normal: 'Routine mission operations',
+      'oxygen-conserve': 'Low-activity oxygen conservation',
+      'power-priority': 'Noncritical task deferral',
+      'water-ration': 'Water-use conservation',
+      'radiation-shelter': 'Sheltered operations',
+      'crew-rest': 'Scheduled rest'
+    }[decision.id];
     astronaut.fatigue = clampResource(
       astronaut.fatigue +
       Math.round(4 * decision.activityFactor) +
@@ -331,6 +414,7 @@ export function advanceMission(mission, decisionId = 'normal') {
   if (missionFailed) {
     mission.status = 'failed';
     mission.phase = 'Critical';
+    mission.operationStage = 'complete';
     mission.score = computeMissionScore(mission);
     mission.report = buildMissionReport(mission, 'Mission Failure');
     return validateMissionState(mission);
@@ -340,15 +424,17 @@ export function advanceMission(mission, decisionId = 'normal') {
   if (nextDay > mission.duration) {
     mission.status = 'complete';
     mission.phase = 'Complete';
+    mission.operationStage = 'complete';
     mission.score = computeMissionScore(mission);
     mission.report = buildMissionReport(mission);
     return validateMissionState(mission);
   }
 
   mission.day = nextDay;
+  mission.operationStage = 'briefing';
   mission.conditionOverrides = {};
   applyConditionOverrides(mission);
-  mission.emergency = createEmergencyEvent(mission.day, mission.difficulty);
+  mission.emergency = createEmergencyEvent(mission.day, mission.difficulty, mission.scenarioSchedule);
   mission.log = addMissionLog(
     mission.log,
     `${getDayLabel(mission.day)} begins. Scenario trigger: ${mission.conditions.scenario.trigger}`
@@ -365,6 +451,7 @@ export function advanceMission(mission, decisionId = 'normal') {
   ) {
     mission.status = 'failed';
     mission.phase = 'Critical';
+    mission.operationStage = 'complete';
     mission.report = buildMissionReport(mission, 'Mission Failure');
   }
 

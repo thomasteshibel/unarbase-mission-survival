@@ -840,3 +840,60 @@ td { color: #c1cdd5; font-size: 14px; }
   .model-parameter-grid, .nasa-metadata-grid { grid-template-columns: 1fr; }
   .model-preview dl { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
+
+.mission-controls { display: flex; align-items: center; justify-content: space-between; gap: 18px; margin-bottom: 14px; border-color: rgba(102,217,232,.16); background: linear-gradient(110deg, rgba(20,48,67,.8), rgba(11,25,38,.96)); }
+.mission-controls-summary { min-width: 0; }
+.mission-controls-summary h2 { margin: 4px 0; color: #e6f0f3; font-family: Manrope, sans-serif; font-size: 19px; }
+.mission-controls-summary > p:not(.eyebrow) { margin: 0; color: #b4c3cd; font-size: 13px; line-height: 1.55; }
+.mission-control-status { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 10px; }
+.mission-control-actions { display: flex; flex: 0 0 auto; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 7px; max-width: 420px; }
+.mission-controls-compact .mission-controls-summary h2 { font-size: 16px; }
+.mission-controls-compact .mission-controls-actions { max-width: 360px; }
+.header-day { display: flex; flex-direction: column; align-items: center; }
+.header-day small { color: #a4b5c2; font-family: 'DM Mono', monospace; font-size: 9px; letter-spacing: .08em; }
+.mission-progress-track { height: 9px; overflow: hidden; border: 1px solid var(--line); border-radius: 8px; background: #07121c; }
+.mission-progress-track span { display: block; height: 100%; border-radius: inherit; background: linear-gradient(90deg, #39b7ca, #61d99d); transition: width .2s ease; }
+.overview-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 13px; margin: 13px 0; }
+.objective-list { display: grid; gap: 13px; margin: 14px 0 0; padding: 0; list-style: none; }
+.objective-list li { display: grid; grid-template-columns: 32px 1fr; gap: 10px; align-items: start; }
+.objective-list li > span { color: #80dbe3; font-family: 'DM Mono', monospace; font-size: 13px; }
+.objective-list strong { color: #dce8ed; font-size: 14px; }
+.objective-list p { margin: 3px 0 0; color: #aebdc8; font-size: 13px; line-height: 1.5; }
+.mission-day-list > ol { display: grid; gap: 0; margin-top: 15px; }
+.mission-day-item { position: relative; display: grid; grid-template-columns: 18px 1fr; gap: 12px; padding: 0 0 20px; }
+.mission-day-item:not(:last-child)::after { position: absolute; top: 16px; bottom: -1px; left: 7px; width: 1px; background: var(--line-strong); content: ''; }
+.mission-day-item > .timeline-marker { z-index: 1; margin-top: 4px; }
+.mission-day-content { min-width: 0; padding: 13px; border: 1px solid var(--line); border-radius: 8px; background: rgba(5,15,24,.25); }
+.mission-day-current .mission-day-content { border-color: rgba(244,183,95,.38); background: rgba(244,183,95,.045); }
+.mission-day-complete .mission-day-content { border-color: rgba(89,214,149,.2); }
+.mission-day-heading { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; }
+.mission-day-content h3 { margin: 8px 0 4px; color: #dce8ed; font-family: Manrope, sans-serif; font-size: 16px; }
+.mission-day-content > p { margin: 0; color: #b1c0c9; font-size: 13px; line-height: 1.55; }
+.mission-day-meta { display: flex; flex-wrap: wrap; gap: 8px 16px; margin-top: 9px; color: #9eb1be; font-size: 12px; }
+.resource-detail-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin: 14px 0; }
+.resource-detail-primary h2, .resource-detail-stat h2 { margin: 7px 0; color: #edf5f7; font-family: Manrope, sans-serif; font-size: 23px; }
+.resource-detail-primary h2 small { color: #afbec8; font-size: 14px; font-weight: 500; }
+.resource-detail-primary > p:not(.eyebrow), .resource-detail-stat > p:not(.eyebrow) { margin: 7px 0 0; color: #aebdc8; font-size: 12px; line-height: 1.5; }
+.dataset-status-list { display: grid; gap: 10px; margin-top: 14px; }
+.dataset-status-list > div { display: grid; grid-template-columns: minmax(175px, .35fr) minmax(0, 1fr); gap: 14px; padding: 13px; border: 1px solid var(--line); border-radius: 8px; background: rgba(5,15,24,.24); }
+.dataset-status-list h3 { margin: 0; color: #dce8ed; font-size: 14px; }
+.dataset-status-list p { margin: 4px 0; color: #adbdc7; font-size: 13px; line-height: 1.5; }
+.dataset-status-list a { color: #a8e7eb; font-size: 13px; text-decoration: underline; text-underline-offset: 3px; }
+.dataset-load-status { color: #aed5c4; font-size: 13px; }
+.crew-skills { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0; }
+.emergency-meta { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+
+@media (max-width: 900px) {
+  .mission-controls { align-items: flex-start; flex-direction: column; }
+  .mission-control-actions { justify-content: flex-start; max-width: none; }
+  .resource-detail-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+@media (max-width: 600px) {
+  .overview-grid, .resource-detail-grid { grid-template-columns: 1fr; }
+  .mission-controls { padding: 14px; }
+  .mission-control-actions { width: 100%; }
+  .mission-control-actions .button { flex: 1 1 auto; }
+  .dataset-status-list > div { grid-template-columns: 1fr; gap: 8px; }
+  .emergency-meta { grid-template-columns: 1fr; }
+}

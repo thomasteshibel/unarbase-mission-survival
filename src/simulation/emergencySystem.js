@@ -169,8 +169,35 @@ const SCENARIO_RESPONSES = {
   }
 };
 
-export function createEmergencyEvent(day = 1, difficulty = 'Standard') {
-  const scenario = getScenarioForDay(day);
+const EVENT_CONTEXT = {
+  'reduced-solar': {
+    affectedSystems: ['Solar array', 'Electrical reserve', 'Battery'],
+    timeSensitivity: 'Review power priorities before today’s energy balance is applied.'
+  },
+  'recycler-malfunction': {
+    affectedSystems: ['Water recycler', 'Fresh water inventory', 'Electrical load'],
+    timeSensitivity: 'Choose a recovery or conservation response before today’s resource update.'
+  },
+  'communications-interruption': {
+    affectedSystems: ['Communications relay', 'Crew workload'],
+    timeSensitivity: 'Select the crew’s autonomous plan while mission control is unavailable.'
+  },
+  'oxygen-leak': {
+    affectedSystems: ['Oxygen reserve', 'Habitat pressure integrity'],
+    timeSensitivity: 'Isolate or manage the modeled leak before the daily reserve loss is applied.'
+  },
+  'solar-radiation-event': {
+    affectedSystems: ['Crew activity', 'Relative radiation-risk index'],
+    timeSensitivity: 'Review the shelter and activity options before the day’s simplified risk response.'
+  },
+  'battery-degradation': {
+    affectedSystems: ['Backup battery', 'Electrical reserve', 'Power demand'],
+    timeSensitivity: 'Set the backup-power strategy before the simulated degradation period.'
+  }
+};
+
+export function createEmergencyEvent(day = 1, difficulty = 'Standard', scenarioSchedule = null) {
+  const scenario = getScenarioForDay(day, scenarioSchedule);
   const template = SCENARIO_RESPONSES[scenario.id];
   if (!template) {
     return null;
@@ -184,6 +211,12 @@ export function createEmergencyEvent(day = 1, difficulty = 'Standard') {
     description: `${scenario.trigger} Select a response; its effects are illustrative, scenario-based estimates. Difficulty: ${difficulty}.`,
     trigger: scenario.trigger,
     durationDays: scenario.durationDays,
+    affectedSystems: [...(EVENT_CONTEXT[scenario.id]?.affectedSystems ?? [])],
+    timeSensitivity: EVENT_CONTEXT[scenario.id]?.timeSensitivity ?? 'Review the event before proceeding.',
+    resolutionStatus: 'Awaiting commander response',
+    requiredSkill: ['reduced-solar', 'recycler-malfunction', 'communications-interruption', 'oxygen-leak', 'battery-degradation'].includes(scenario.id)
+      ? 'systemsTroubleshooting'
+      : null,
     options: template.options.map((option) => ({ ...option }))
   };
 }

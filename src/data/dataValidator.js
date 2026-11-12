@@ -59,6 +59,25 @@ export function validateMissionState(mission) {
     throw new RangeError('Mission day must be an integer within the configured mission duration.');
   }
 
+  if (!['briefing', 'operations', 'complete'].includes(mission.operationStage)) {
+    throw new RangeError('Mission operation stage must be briefing, operations, or complete.');
+  }
+  if (typeof mission.paused !== 'boolean') {
+    throw new TypeError('Mission paused state must be a boolean.');
+  }
+  if (!Number.isInteger(mission.scenarioSeed) || mission.scenarioSeed < 0 || mission.scenarioSeed > 0xffffffff) {
+    throw new RangeError('Mission scenario seed must be an unsigned 32-bit integer.');
+  }
+  if (
+    !Array.isArray(mission.scenarioSchedule) ||
+    mission.scenarioSchedule.length !== 7 ||
+    mission.scenarioSchedule.some((scenario, index) =>
+      scenario?.day !== index + 1 || typeof scenario.id !== 'string' || typeof scenario.trigger !== 'string'
+    )
+  ) {
+    throw new RangeError('Mission scenario schedule must contain seven ordered, described day entries.');
+  }
+
   if (!Array.isArray(mission.astronauts) || mission.astronauts.length !== mission.crew) {
     throw new RangeError('Mission crew roster must match the configured crew count.');
   }
