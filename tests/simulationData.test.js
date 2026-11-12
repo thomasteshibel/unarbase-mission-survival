@@ -21,10 +21,36 @@ test('resource needs use consistent crew-day units and respond to activity and r
   const nominal = getDailyResourceNeeds({ crew: 4, difficulty: 'Standard' });
   const quiet = getDailyResourceNeeds({ crew: 4, activityFactor: 0.5 });
   const poorRecovery = getDailyResourceNeeds({ crew: 4, recyclerEfficiency: 0.45 });
+  const scenarioRecovery = getDailyResourceNeeds({
+    crew: 4,
+    recyclerEfficiency: 0.45,
+    modelParameters: { recyclerEfficiency: 0.9 }
+  });
   assert.equal(nominal.oxygen, 2352);
   assert.equal(nominal.food, 2.48);
   assert.ok(quiet.oxygen < nominal.oxygen);
   assert.ok(poorRecovery.water > nominal.water);
+  assert.equal(scenarioRecovery.recyclerEfficiency, 0.45);
+  assert.equal(scenarioRecovery.water, poorRecovery.water);
+});
+
+test('editable model assumptions change baseline daily resource needs', () => {
+  const needs = getDailyResourceNeeds({
+    crew: 2,
+    modelParameters: {
+      oxygenLitersPerPersonDay: 700,
+      grossWaterLitersPerPersonDay: 4,
+      foodKgPerPersonDay: 0.8,
+      basePowerKWhPerDay: 100,
+      solarGenerationKWhPerDay: 140,
+      recyclerEfficiency: 0.5
+    }
+  });
+  assert.equal(needs.oxygen, 1400);
+  assert.equal(needs.water, 5.1);
+  assert.equal(needs.food, 1.6);
+  assert.equal(needs.powerDemand, 50);
+  assert.equal(needs.solarGeneration, 140);
 });
 
 test('resource stocks remain non-negative during a high-demand, low-solar period', () => {

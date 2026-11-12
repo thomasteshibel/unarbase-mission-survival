@@ -1,6 +1,6 @@
-import { DEFAULT_CONFIG, MISSION_DIFFICULTIES, SIMULATION_PROFILE } from '../data/simulationConfig.js';
+import { DEFAULT_CONFIG, DEFAULT_MODEL_PARAMETERS, MISSION_DIFFICULTIES, SIMULATION_PROFILE } from '../data/simulationConfig.js';
 import { getMissionData } from '../data/simulationDataProvider.js';
-import { clampResource, validateMissionState } from '../data/dataValidator.js';
+import { clampResource, validateInitialResources, validateMissionState, validateModelParameters } from '../data/dataValidator.js';
 import { addMissionLog, getDayLabel } from '../utils/formatting.js';
 import { applyDailyResources, createInitialResources, getDailyResourceNeeds } from './resourceSystem.js';
 import { createEmergencyEvent, resolveEmergencyDecision } from './emergencySystem.js';
@@ -81,6 +81,7 @@ export function createAstronautRoster(count = 4) {
 function getConditions(mission, day = mission.day) {
   return getMissionData(day, mission.difficulty, {
     ...mission.systems,
+    ...mission.modelParameters,
     ...mission.conditionOverrides
   });
 }
@@ -131,6 +132,12 @@ export function createMission(config = DEFAULT_CONFIG) {
   const duration = Number(config.days ?? 7);
   const crew = Number(config.crew ?? 4);
   const difficulty = config.difficulty ?? 'Standard';
+  const modelParameters = {
+    ...DEFAULT_MODEL_PARAMETERS,
+    ...config.modelParameters
+  };
+  validateModelParameters(modelParameters);
+  validateInitialResources(config.initialResources ?? DEFAULT_CONFIG.initialResources);
   if (!Number.isInteger(duration) || duration < 1 || duration > 7) {
     throw new RangeError('Mission duration must be an integer from 1 to 7 days.');
   }
@@ -141,7 +148,7 @@ export function createMission(config = DEFAULT_CONFIG) {
     throw new RangeError(`Unsupported mission difficulty: ${difficulty}`);
   }
   const mission = {
-    simulationVersion: 2,
+    simulationVersion: 3,
     day: 1,
     duration,
     crew,
@@ -152,9 +159,10 @@ export function createMission(config = DEFAULT_CONFIG) {
     astronauts: createAstronautRoster(crew),
     resources: createInitialResources(config),
     initialResources: createInitialResources(config),
+    modelParameters,
     systems: {
       ...SIMULATION_PROFILE.mission.equipment,
-      recyclerEfficiency: 0.9,
+      recyclerEfficiency: modelParameters.recyclerEfficiency,
       habitatPressureKPa: 101.3,
       cabinTemperatureC: 21
     },
@@ -175,6 +183,21 @@ export function createMission(config = DEFAULT_CONFIG) {
   mission.emergency = createEmergencyEvent(1, mission.difficulty);
   recordHistory(mission);
   mission.phase = getMissionPhase(mission);
+  return validateMissionState(mission);
+}
+
+export function updateMissionModelParameters(mission, parameters) {
+  const nextParameters = {
+    ...mission.modelParameters,
+    ...parameters
+  };
+  validateModelParameters(nextParameters);
+  mission.modelParameters = nextParameters;
+  mission.systems.recyclerEfficiency = nextParameters.recyclerEfficiency;
+  applyConditionOverrides(mission);
+  const summary = `Model settings updated for the next operation: O₂ ${nextParameters.oxygenLitersPerPersonDay} L/person-day, water recovery ${Math.round(nextParameters.recyclerEfficiency * 100)}%, solar generation ${nextParameters.solarGenerationKWhPerDay} kWh/day.`;
+  mission.log = addMissionLog(mission.log, summary);
+  mission.timeline.push({ day: mission.day, title: 'Simulation parameters updated', detail: summary });
   return validateMissionState(mission);
 }
 
@@ -243,7 +266,8 @@ export function advanceMission(mission, decisionId = 'normal') {
     recyclerEfficiency: mission.conditions.recyclerEfficiency,
     recyclerPowerDemand: mission.conditions.recyclerPowerDemand,
     oxygenLeakFraction: mission.conditions.oxygenLeakFraction,
-    solarGeneration: mission.conditions.solarGeneration
+    solarGeneration: mission.conditions.solarGeneration,
+    modelParameters: mission.modelParameters
   });
   const startingResources = { ...mission.resources };
   mission.resources = applyDailyResources(mission.resources, {
@@ -252,6 +276,7 @@ export function advanceMission(mission, decisionId = 'normal') {
     activityFactor: effectiveActivityFactor,
     waterUseFactor: decision.waterUseFactor,
     powerDemandFactor: decision.powerDemandFactor,
+    modelParameters: mission.modelParameters,
     conditions: mission.conditions
   });
   if (decision.radiationReduction) {

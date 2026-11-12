@@ -1,22 +1,15 @@
 import { SIMULATION_PROFILE } from '../data/simulationConfig.js';
-import { clampResource } from '../data/dataValidator.js';
-
-const MAX_POWER_RESERVE_KWH = 600;
-const MAX_BATTERY_RESERVE_KWH = 300;
-const OXYGEN_LITERS_PER_PERSON_DAY = 588;
-const GROSS_WATER_LITERS_PER_PERSON_DAY = 3.5;
-const FOOD_KG_PER_PERSON_DAY = 0.62;
-const BASE_POWER_DEMAND_KWH_PER_DAY = 84;
+import { clampResource, RESOURCE_CAPACITIES } from '../data/dataValidator.js';
 
 export function createInitialResources(config = {}) {
   const starting = config.initialResources ?? SIMULATION_PROFILE.mission.initialResources;
 
   return {
-    oxygen: clampResource(starting.oxygen ?? 20000),
-    water: clampResource(starting.water ?? 110),
-    food: clampResource(starting.food ?? 22),
-    power: clampResource(starting.power ?? 360, MAX_POWER_RESERVE_KWH),
-    battery: clampResource(starting.battery ?? 260, MAX_BATTERY_RESERVE_KWH)
+    oxygen: clampResource(starting.oxygen ?? 20000, RESOURCE_CAPACITIES.oxygen),
+    water: clampResource(starting.water ?? 110, RESOURCE_CAPACITIES.water),
+    food: clampResource(starting.food ?? 22, RESOURCE_CAPACITIES.food),
+    power: clampResource(starting.power ?? 360, RESOURCE_CAPACITIES.power),
+    battery: clampResource(starting.battery ?? 260, RESOURCE_CAPACITIES.battery)
   };
 }
 
@@ -24,12 +17,13 @@ export function getDailyResourceNeeds({
   crew = 4,
   difficulty = 'Standard',
   activityFactor = 1,
-  recyclerEfficiency = 0.9,
+  recyclerEfficiency,
   recyclerPowerDemand = 0,
   waterUseFactor = 1,
   powerDemandFactor = 1,
   oxygenLeakFraction = 0,
-  solarGeneration = 104.625
+  solarGeneration,
+  modelParameters = {}
 } = {}) {
   const difficultyFactor = {
     Training: 0.8,
@@ -38,15 +32,19 @@ export function getDailyResourceNeeds({
   }[difficulty] ?? 1;
   const safeCrew = Math.max(0, Number(crew));
   const safeActivity = Math.max(0.5, Number(activityFactor));
-  const safeRecovery = Math.min(1, Math.max(0, Number(recyclerEfficiency)));
+  const safeRecovery = Math.min(1, Math.max(0, Number(recyclerEfficiency ?? modelParameters.recyclerEfficiency ?? 0.9)));
+  const oxygenRate = Number(modelParameters.oxygenLitersPerPersonDay ?? 588);
+  const grossWaterRate = Number(modelParameters.grossWaterLitersPerPersonDay ?? 3.5);
+  const foodRate = Number(modelParameters.foodKgPerPersonDay ?? 0.62);
+  const basePower = Number(modelParameters.basePowerKWhPerDay ?? 84);
 
   return {
-    oxygen: safeCrew * OXYGEN_LITERS_PER_PERSON_DAY * difficultyFactor * safeActivity,
-    waterGross: safeCrew * GROSS_WATER_LITERS_PER_PERSON_DAY,
-    water: safeCrew * (GROSS_WATER_LITERS_PER_PERSON_DAY * (1 - safeRecovery) + 0.55) * Math.max(0.5, Number(waterUseFactor)),
-    food: safeCrew * FOOD_KG_PER_PERSON_DAY * difficultyFactor,
-    powerDemand: (BASE_POWER_DEMAND_KWH_PER_DAY * (safeCrew / 4) * difficultyFactor * safeActivity + Math.max(0, Number(recyclerPowerDemand))) * Math.max(0.5, Number(powerDemandFactor)),
-    solarGeneration: Math.max(0, Number(solarGeneration)),
+    oxygen: safeCrew * oxygenRate * difficultyFactor * safeActivity,
+    waterGross: safeCrew * grossWaterRate,
+    water: safeCrew * (grossWaterRate * (1 - safeRecovery) + 0.55) * Math.max(0.5, Number(waterUseFactor)),
+    food: safeCrew * foodRate * difficultyFactor,
+    powerDemand: (basePower * (safeCrew / 4) * difficultyFactor * safeActivity + Math.max(0, Number(recyclerPowerDemand))) * Math.max(0.5, Number(powerDemandFactor)),
+    solarGeneration: Math.max(0, Number(solarGeneration ?? modelParameters.solarGenerationKWhPerDay ?? 104.625)),
     oxygenLeakFraction: Math.max(0, Number(oxygenLeakFraction)),
     recyclerEfficiency: safeRecovery
   };
@@ -58,7 +56,8 @@ export function applyDailyResources(resources, {
   activityFactor = 1,
   waterUseFactor = 1,
   powerDemandFactor = 1,
-  conditions = {}
+  conditions = {},
+  modelParameters = {}
 } = {}) {
   const needs = getDailyResourceNeeds({
     crew,
@@ -69,7 +68,8 @@ export function applyDailyResources(resources, {
     recyclerEfficiency: conditions.recyclerEfficiency ?? 0.9,
     recyclerPowerDemand: conditions.recyclerPowerDemand ?? 0,
     oxygenLeakFraction: conditions.oxygenLeakFraction ?? 0,
-    solarGeneration: conditions.solarGeneration ?? 104.625
+    solarGeneration: conditions.solarGeneration ?? modelParameters.solarGenerationKWhPerDay ?? 104.625,
+    modelParameters
   });
   const oxygenUse = needs.oxygen + Number(resources.oxygen) * needs.oxygenLeakFraction;
   const waterUse = needs.water;
@@ -77,14 +77,14 @@ export function applyDailyResources(resources, {
   const energyBalance = needs.solarGeneration - needs.powerDemand;
   let power = Number(resources.power);
   let battery = Number(resources.battery);
-  const batteryCapacity = MAX_BATTERY_RESERVE_KWH * Math.min(
+  const batteryCapacity = RESOURCE_CAPACITIES.battery * Math.min(
     1,
     Math.max(0, Number(conditions.batteryCapacityFactor ?? 1))
   );
   battery = Math.min(battery, batteryCapacity);
 
   if (energyBalance >= 0) {
-    const storedInMainReserve = Math.min(MAX_POWER_RESERVE_KWH - power, energyBalance);
+    const storedInMainReserve = Math.min(RESOURCE_CAPACITIES.power - power, energyBalance);
     power += storedInMainReserve;
     battery = Math.min(batteryCapacity, battery + Math.max(0, energyBalance - storedInMainReserve) * 0.4);
   } else {
@@ -101,7 +101,7 @@ export function applyDailyResources(resources, {
     oxygen: clampResource(Number(resources.oxygen) - oxygenUse),
     water: clampResource(Number(resources.water) - waterUse),
     food: clampResource(Number(resources.food) - foodUse),
-    power: clampResource(power, MAX_POWER_RESERVE_KWH),
-    battery: clampResource(battery, MAX_BATTERY_RESERVE_KWH)
+    power: clampResource(power, RESOURCE_CAPACITIES.power),
+    battery: clampResource(battery, RESOURCE_CAPACITIES.battery)
   };
 }

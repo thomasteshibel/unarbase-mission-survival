@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { advanceMission, createMission, resolveEmergencyChoice } from '../src/simulation/missionEngine.js';
+import { advanceMission, createMission, resolveEmergencyChoice, updateMissionModelParameters } from '../src/simulation/missionEngine.js';
 
 function advanceWithScenarioResponse(mission) {
   if (mission.emergency) {
@@ -15,6 +15,56 @@ test('mission engine creates a valid starting state with four astronauts', () =>
   assert.equal(mission.crew, 4);
   assert.equal(mission.astronauts.length, 4);
   assert.equal(mission.status, 'active');
+});
+
+test('new mission accepts validated starting inventories and model assumptions', () => {
+  const mission = createMission({
+    days: 5,
+    crew: 2,
+    difficulty: 'Training',
+    initialResources: { oxygen: 9000, water: 80, food: 12, power: 200, battery: 120 },
+    modelParameters: {
+      oxygenLitersPerPersonDay: 700,
+      grossWaterLitersPerPersonDay: 4,
+      foodKgPerPersonDay: 0.8,
+      basePowerKWhPerDay: 100,
+      solarGenerationKWhPerDay: 140,
+      recyclerEfficiency: 0.5
+    }
+  });
+  assert.equal(mission.duration, 5);
+  assert.equal(mission.resources.oxygen, 9000);
+  assert.equal(mission.resources.water, 80);
+  assert.equal(mission.modelParameters.oxygenLitersPerPersonDay, 700);
+  assert.throws(() => createMission({
+    days: 5,
+    crew: 2,
+    difficulty: 'Training',
+    initialResources: { oxygen: 100001, water: 80, food: 12, power: 200, battery: 120 }
+  }), /Starting oxygen inventory/);
+});
+
+test('model updates affect upcoming mission calculations and reject invalid rates', () => {
+  const mission = createMission({ days: 3, crew: 2, difficulty: 'Standard' });
+  const updated = updateMissionModelParameters(mission, {
+    oxygenLitersPerPersonDay: 700,
+    grossWaterLitersPerPersonDay: 4,
+    foodKgPerPersonDay: 0.8,
+    basePowerKWhPerDay: 100,
+    solarGenerationKWhPerDay: 140,
+    recyclerEfficiency: 0.5
+  });
+  assert.equal(updated.conditions.solarGeneration, 140);
+  assert.equal(updated.systems.recyclerEfficiency, 0.5);
+  assert.throws(() => updateMissionModelParameters(mission, { oxygenLitersPerPersonDay: 1201 }), /between 100 and 1200/);
+
+  if (updated.emergency) resolveEmergencyChoice(updated, updated.emergency.options[0].id);
+  advanceMission(updated);
+  const latest = updated.history.at(-1);
+  assert.equal(latest.oxygenUse, 1442);
+  assert.equal(latest.waterMakeup, 5.1);
+  assert.equal(latest.foodUse, 1.6);
+  assert.equal(latest.powerDemand, 51.5);
 });
 
 test('mission engine advances through multiple days without crashing', () => {

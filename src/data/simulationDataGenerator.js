@@ -95,7 +95,7 @@ export function generateMissionConditions(day = 1, difficulty = 'Standard', equi
 
   return {
     scenario,
-    solarGeneration: 25 * 4.5 * 0.93 * solarHealth * solarFactor,
+    solarGeneration: Number(equipment.solarGenerationKWhPerDay ?? 104.625) * solarHealth * solarFactor,
     oxygenLeakFraction: equipment.oxygenLeakFraction ?? scenario.oxygenLeakFraction ?? 0,
     recyclerEfficiency,
     recyclerPowerDemand: scenario.recyclerPowerDemand ?? 0,

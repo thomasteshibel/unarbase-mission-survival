@@ -1,5 +1,48 @@
 const RESOURCE_KEYS = ['oxygen', 'water', 'food', 'power', 'battery'];
 
+export const MODEL_PARAMETER_RANGES = Object.freeze({
+  oxygenLitersPerPersonDay: { min: 100, max: 1200 },
+  grossWaterLitersPerPersonDay: { min: 0.5, max: 15 },
+  foodKgPerPersonDay: { min: 0.1, max: 3 },
+  basePowerKWhPerDay: { min: 1, max: 500 },
+  solarGenerationKWhPerDay: { min: 0, max: 600 },
+  recyclerEfficiency: { min: 0, max: 0.98 }
+});
+
+export const RESOURCE_CAPACITIES = Object.freeze({
+  oxygen: 100000,
+  water: 10000,
+  food: 1000,
+  power: 600,
+  battery: 300
+});
+
+export function validateModelParameters(parameters) {
+  if (!parameters || typeof parameters !== 'object' || Array.isArray(parameters)) {
+    throw new TypeError('Simulation model parameters must be an object.');
+  }
+  for (const [key, { min, max }] of Object.entries(MODEL_PARAMETER_RANGES)) {
+    const value = Number(parameters[key]);
+    if (!Number.isFinite(value) || value < min || value > max) {
+      throw new RangeError(`${key} must be a finite value between ${min} and ${max}.`);
+    }
+  }
+  return parameters;
+}
+
+export function validateInitialResources(resources) {
+  if (!resources || typeof resources !== 'object' || Array.isArray(resources)) {
+    throw new TypeError('Starting resource inventories must be an object.');
+  }
+  for (const key of RESOURCE_KEYS) {
+    const value = Number(resources[key]);
+    if (!Number.isFinite(value) || value < 0 || value > RESOURCE_CAPACITIES[key]) {
+      throw new RangeError(`Starting ${key} inventory must be between 0 and ${RESOURCE_CAPACITIES[key]}.`);
+    }
+  }
+  return resources;
+}
+
 export function validateMissionState(mission) {
   if (!mission || typeof mission !== 'object') {
     throw new TypeError('Mission state must be an object.');

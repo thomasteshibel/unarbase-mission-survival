@@ -1,13 +1,16 @@
 import Chart from 'chart.js/auto';
-import { DEFAULT_CONFIG, MISSION_DIFFICULTIES, SIMULATION_PROFILE } from './data/simulationConfig.js';
+import { DEFAULT_CONFIG, DEFAULT_MODEL_PARAMETERS, MISSION_DIFFICULTIES, SIMULATION_PROFILE } from './data/simulationConfig.js';
 import { dataConfig, isNASADataModeAvailable } from './data/dataConfig.js';
+import { MODEL_PARAMETER_RANGES, RESOURCE_CAPACITIES } from './data/dataValidator.js';
+import { NASA_DIVINER_MOSAIC } from './data/nasaDataCatalog.js';
 import { readStoredMission, writeStoredMission, clearStoredMission } from './services/storageService.js';
 import {
   advanceMission,
   buildMissionReport,
   createMission,
   DAILY_DECISIONS,
-  resolveEmergencyChoice
+  resolveEmergencyChoice,
+  updateMissionModelParameters
 } from './simulation/missionEngine.js';
 import { getDailyResourceNeeds } from './simulation/resourceSystem.js';
 
@@ -22,6 +25,7 @@ const NAVIGATION = [
   { id: 'analytics', label: 'Mission Analytics', icon: '⌁', group: 'Mission' },
   { id: 'report', label: 'Final Mission Report', icon: '▤', group: 'Mission' }
 ];
+const APP_BASE_PATH = import.meta.env?.BASE_URL ?? '/';
 
 const SUPPORT_NAVIGATION = [
   { id: 'data-source', label: 'Data Source', icon: '◈' },
@@ -58,6 +62,76 @@ function formatNumber(value, digits = 0) {
   return new Intl.NumberFormat('en-US', { maximumFractionDigits: digits }).format(Number(value) || 0);
 }
 
+function getModelParameterValues(formData) {
+  return {
+    oxygenLitersPerPersonDay: Number(formData.get('oxygenLitersPerPersonDay')),
+    grossWaterLitersPerPersonDay: Number(formData.get('grossWaterLitersPerPersonDay')),
+    foodKgPerPersonDay: Number(formData.get('foodKgPerPersonDay')),
+    basePowerKWhPerDay: Number(formData.get('basePowerKWhPerDay')),
+    solarGenerationKWhPerDay: Number(formData.get('solarGenerationKWhPerDay')),
+    recyclerEfficiency: Number(formData.get('recyclerEfficiency')) / 100
+  };
+}
+
+function renderModelParameterFields(parameters) {
+  const fields = [
+    { key: 'oxygenLitersPerPersonDay', label: 'Oxygen metabolism', unit: 'L / person-day', step: 1, digits: 0 },
+    { key: 'grossWaterLitersPerPersonDay', label: 'Gross water use', unit: 'L / person-day', step: 0.1, digits: 1 },
+    { key: 'foodKgPerPersonDay', label: 'Packaged food', unit: 'kg / person-day', step: 0.01, digits: 2 },
+    { key: 'basePowerKWhPerDay', label: 'Base habitat load', unit: 'kWh / day · 4 crew', step: 1, digits: 0 },
+    { key: 'solarGenerationKWhPerDay', label: 'Solar generation', unit: 'kWh / day · baseline', step: 'any', digits: 1 },
+    { key: 'recyclerEfficiency', label: 'Water recovery', unit: '% of gross water', step: 1, digits: 0 }
+  ];
+  return fields.map(({ key, label, unit, step }) => {
+    const limits = MODEL_PARAMETER_RANGES[key];
+    const displayedValue = key === 'recyclerEfficiency'
+      ? Math.round(Number(parameters[key] ?? DEFAULT_MODEL_PARAMETERS[key]) * 100)
+      : Number(parameters[key] ?? DEFAULT_MODEL_PARAMETERS[key]);
+    const minimum = key === 'recyclerEfficiency' ? limits.min * 100 : limits.min;
+    const maximum = key === 'recyclerEfficiency' ? limits.max * 100 : limits.max;
+    return `
+      <label class="model-parameter">
+        <span>${escapeHTML(label)}</span>
+        <span class="model-parameter-input"><input name="${key}" type="number" min="${minimum}" max="${maximum}" step="${step}" value="${displayedValue}" required /><small>${escapeHTML(unit)}</small></span>
+        <small class="field-help">Allowed range: ${minimum}–${maximum}</small>
+      </label>
+    `;
+  }).join('');
+}
+
+function renderStartingResourceFields(resources) {
+  const fields = [
+    { key: 'oxygen', label: 'Oxygen', unit: 'L', step: 100 },
+    { key: 'water', label: 'Water', unit: 'L', step: 1 },
+    { key: 'food', label: 'Food', unit: 'kg', step: 0.5 },
+    { key: 'power', label: 'Power reserve', unit: 'kWh', step: 5 },
+    { key: 'battery', label: 'Backup battery', unit: 'kWh', step: 5 }
+  ];
+  return fields.map(({ key, label, unit, step }) => `
+    <label class="inventory-input">
+      <span>${escapeHTML(label)}</span>
+      <span class="model-parameter-input"><input name="initial-${key}" type="number" min="0" max="${RESOURCE_CAPACITIES[key]}" step="${step}" value="${Number(resources[key])}" required /><small>${escapeHTML(unit)}</small></span>
+      <small class="field-help">Maximum ${formatNumber(RESOURCE_CAPACITIES[key])} ${escapeHTML(unit)}</small>
+    </label>
+  `).join('');
+}
+
+function renderModelPreview(parameters, crew, difficulty) {
+  const needs = getDailyResourceNeeds({
+    crew,
+    difficulty,
+    modelParameters: parameters
+  });
+  const values = [
+    ['Oxygen', `${formatNumber(needs.oxygen, 1)} L/day`],
+    ['Water make-up', `${formatNumber(needs.water, 1)} L/day`],
+    ['Food', `${formatNumber(needs.food, 2)} kg/day`],
+    ['Power demand', `${formatNumber(needs.powerDemand, 1)} kWh/day`],
+    ['Solar generation', `${formatNumber(needs.solarGeneration, 1)} kWh/day`]
+  ];
+  return `<div class="model-preview-heading"><strong>Baseline daily model · ${crew} crew · ${escapeHTML(difficulty)}</strong><span>Before today’s plan and scenario effects</span></div><dl>${values.map(([label, value]) => `<div><dt>${escapeHTML(label)}</dt><dd>${escapeHTML(value)}</dd></div>`).join('')}</dl>`;
+}
+
 function getInitialPage() {
   const page = globalThis.location?.hash?.slice(1);
   return VALID_PAGES.has(page) ? page : 'dashboard';
@@ -65,12 +139,28 @@ function getInitialPage() {
 
 export function createApp(root) {
   const savedMission = readStoredMission();
-  const isCompatibleSave = savedMission?.simulationVersion === 2;
+  const isCompatibleSave = [2, 3].includes(savedMission?.simulationVersion);
+  const restoredMission = isCompatibleSave
+    ? {
+        ...savedMission,
+        simulationVersion: 3,
+        modelParameters: {
+          ...DEFAULT_MODEL_PARAMETERS,
+          ...savedMission.modelParameters
+        }
+      }
+    : null;
   const appState = {
     screen: getInitialPage(),
-    config: { ...DEFAULT_CONFIG, initialResources: { ...DEFAULT_CONFIG.initialResources } },
-    mission: isCompatibleSave ? savedMission : createMission(DEFAULT_CONFIG),
-    report: isCompatibleSave ? savedMission.report : null,
+    config: {
+      days: restoredMission?.duration ?? DEFAULT_CONFIG.days,
+      crew: restoredMission?.crew ?? DEFAULT_CONFIG.crew,
+      difficulty: restoredMission?.difficulty ?? DEFAULT_CONFIG.difficulty,
+      initialResources: { ...(restoredMission?.initialResources ?? DEFAULT_CONFIG.initialResources) },
+      modelParameters: { ...(restoredMission?.modelParameters ?? DEFAULT_CONFIG.modelParameters) }
+    },
+    mission: restoredMission ?? createMission(DEFAULT_CONFIG),
+    report: restoredMission?.report ?? null,
     chart: null,
     toast: '',
     selectedDecision: 'normal',
@@ -107,22 +197,42 @@ export function createApp(root) {
       return;
     }
 
-    appState.config = {
-      days,
-      crew,
-      difficulty: MISSION_DIFFICULTIES.includes(difficulty) ? difficulty : 'Standard',
-      initialResources: { ...DEFAULT_CONFIG.initialResources }
-    };
-    appState.mission = createMission(appState.config);
-    appState.report = null;
-    appState.selectedDecision = 'normal';
-    appState.screen = 'dashboard';
-    appState.toast = { message: 'New mission initialized. All values are simulated.', tone: 'success' };
-    globalThis.history?.replaceState?.(null, '', '#dashboard');
     try {
-      persistMission();
+      if (!MISSION_DIFFICULTIES.includes(difficulty)) {
+        throw new Error('Choose a supported mission difficulty.');
+      }
+      const initialResources = Object.fromEntries(
+        Object.keys(RESOURCE_CAPACITIES).map((key) => [key, Number(formData.get(`initial-${key}`))])
+      );
+      const modelParameters = { ...appState.mission.modelParameters };
+      const nextConfig = { days, crew, difficulty, initialResources, modelParameters };
+      const nextMission = createMission(nextConfig);
+      writeStoredMission(nextMission);
+      appState.config = nextConfig;
+      appState.mission = nextMission;
+      appState.report = null;
+      appState.selectedDecision = 'normal';
+      appState.screen = 'dashboard';
+      appState.toast = { message: 'New mission initialized with your configured inventory and model assumptions.', tone: 'success' };
+      globalThis.history?.replaceState?.(null, '', '#dashboard');
     } catch (error) {
-      setToast(`New mission started, but progress could not be saved: ${error.message}`, 'error');
+      setToast(`Mission configuration was not applied: ${error.message}`, 'error');
+      appState.screen = 'settings';
+    }
+    render();
+  }
+
+  function applyCurrentModelParameters(formData) {
+    try {
+      const modelParameters = getModelParameterValues(formData);
+      const nextMission = structuredClone(appState.mission);
+      updateMissionModelParameters(nextMission, modelParameters);
+      writeStoredMission(nextMission);
+      appState.mission = nextMission;
+      appState.config.modelParameters = { ...modelParameters };
+      setToast('Model assumptions updated. The next operation uses these rates; past mission days are unchanged.', 'success');
+    } catch (error) {
+      setToast(`Model settings were not applied: ${error.message}`, 'error');
     }
     render();
   }
@@ -404,14 +514,15 @@ export function createApp(root) {
       recyclerEfficiency: conditions.recyclerEfficiency,
       recyclerPowerDemand: conditions.recyclerPowerDemand,
       oxygenLeakFraction: conditions.oxygenLeakFraction,
-      solarGeneration: conditions.solarGeneration
+      solarGeneration: conditions.solarGeneration,
+      modelParameters: mission.modelParameters
     });
     const rows = [
-      ['Oxygen metabolic use', `${formatNumber(needs.oxygen)} L/day`, '0.84 kg per person-day, converted at about 700 L/kg (STP)'],
-      ['Fresh water make-up', `${formatNumber(needs.water, 1)} L/day`, `${formatNumber(needs.waterGross, 1)} L/day gross use; ${Math.round(needs.recyclerEfficiency * 100)}% baseline recovery`],
-      ['Packaged food', `${formatNumber(needs.food, 1)} kg/day`, '0.62 kg per person-day illustrative ration assumption'],
-      ['Electrical demand', `${formatNumber(needs.powerDemand, 1)} kWh/day`, '84 kWh/day nominal four-person habitat load assumption'],
-      ['Solar generation', `${formatNumber(needs.solarGeneration, 1)} kWh/day`, 'Array output adjusted for scenario and system condition']
+      ['Oxygen metabolic use', `${formatNumber(needs.oxygen)} L/day`, `${mission.modelParameters.oxygenLitersPerPersonDay} L/person-day illustrative rate`],
+      ['Fresh water make-up', `${formatNumber(needs.water, 1)} L/day`, `${formatNumber(needs.waterGross, 1)} L/day gross use; ${Math.round(needs.recyclerEfficiency * 100)}% recovery`],
+      ['Packaged food', `${formatNumber(needs.food, 1)} kg/day`, `${mission.modelParameters.foodKgPerPersonDay} kg/person-day illustrative ration assumption`],
+      ['Electrical demand', `${formatNumber(needs.powerDemand, 1)} kWh/day`, `${mission.modelParameters.basePowerKWhPerDay} kWh/day nominal four-person habitat load assumption`],
+      ['Solar generation', `${formatNumber(needs.solarGeneration, 1)} kWh/day`, `${mission.modelParameters.solarGenerationKWhPerDay} kWh/day baseline; adjusted for scenario and system condition`]
     ];
     return `
       ${renderPageHeading('LIFE SUPPORT · DAILY MASS & ENERGY BALANCE', 'Life support', 'Review the model’s daily consumption and recovery assumptions. Values update with crew activity and scenario conditions.')}
@@ -564,22 +675,37 @@ export function createApp(root) {
     const assumptions = SIMULATION_PROFILE.assumptions;
     const nasaAvailable = isNASADataModeAvailable();
     return `
-      ${renderPageHeading('DATA PROVENANCE & MODEL TRANSPARENCY', 'Data source & mode', 'See what is measured, simulated, and assumed. LunarBase has not connected to any NASA dataset.')}
+      ${renderPageHeading('DATA PROVENANCE & MODEL TRANSPARENCY', 'Data source & mode', 'The mission remains a local educational simulation. A verified, archived NASA lunar-surface observation is included for scientific context—not as habitat telemetry.')}
       <div class="data-mode-grid">
         <section class="panel data-mode-card active-mode">
           <span class="mode-check">✓</span><span class="tag tag-green">ACTIVE</span><p class="eyebrow">MODE 01</p><h2>Simulation Mode</h2><p>Deterministic, local scenario schedule generated from documented educational assumptions. It runs without a network connection.</p><div class="mode-data-label">${escapeHTML(SIMULATION_PROFILE.label)}</div>
         </section>
         <section class="panel data-mode-card unavailable-mode">
-          <span class="tag tag-muted">${nasaAvailable ? 'CONFIGURED' : 'UNAVAILABLE'}</span><p class="eyebrow">MODE 02</p><h2>NASA Data Mode</h2><p>No compatible, verified external dataset has been integrated. Selecting an inactive mode never switches or relabels simulation output.</p><button class="button ${nasaAvailable ? 'button-quiet' : 'button-disabled'}" type="button" ${nasaAvailable ? '' : 'disabled aria-disabled="true"'}>NASA Data Mode · ${nasaAvailable ? 'configured' : 'not configured'}</button>
-          <div class="unavailable-reason"><strong>Why unavailable?</strong><span>No compatible, verified dataset is configured. A source, collection period, spatial applicability, units, limitations, and validation are required before external data can be used.</span></div>
+          <span class="tag tag-muted">${nasaAvailable ? 'CONFIGURED' : 'ARCHIVE ONLY'}</span><p class="eyebrow">MODE 02</p><h2>NASA Data Mode</h2><p>NASA’s archived lunar-surface data is available below as a read-only reference. It is not compatible with in-habitat life-support calculations and never replaces simulated mission values.</p><button class="button button-disabled" type="button" disabled aria-disabled="true">Mission telemetry integration · unavailable</button>
+          <div class="unavailable-reason"><strong>Why unavailable?</strong><span>The integrated observation measures lunar surface conditions, not a shielded habitat interior, crew dose, or spacecraft system performance. No mission calculations are labeled as NASA data.</span></div>
         </section>
       </div>
+      <section class="panel nasa-observation">
+        <div class="section-heading"><div><p class="eyebrow">VERIFIED ARCHIVED OBSERVATION · NASA PDS</p><h2>${escapeHTML(NASA_DIVINER_MOSAIC.title)}</h2></div><span class="tag tag-blue">LUNAR SURFACE · NOT LIVE</span></div>
+        <p class="body-copy">The Lunar Reconnaissance Orbiter’s Diviner instrument maps lunar surface temperature. This bundled PDS browse image is an archived global mosaic; it is not an in-cabin reading and is not used to calculate mission resources or crew health.</p>
+        <figure class="nasa-figure">
+          <a href="${escapeHTML(NASA_DIVINER_MOSAIC.sourceUrl)}" target="_blank" rel="noreferrer"><img src="${escapeHTML(APP_BASE_PATH)}${escapeHTML(NASA_DIVINER_MOSAIC.localImagePath)}" alt="${escapeHTML(NASA_DIVINER_MOSAIC.localImageAlt)}" loading="lazy" /></a>
+          <figcaption>${escapeHTML(NASA_DIVINER_MOSAIC.datasetName)} · Source: <a href="${escapeHTML(NASA_DIVINER_MOSAIC.metadataUrl)}" target="_blank" rel="noreferrer">NASA PDS product label</a></figcaption>
+        </figure>
+        <div class="nasa-metadata-grid">
+          <div><span>Instrument</span><strong>LRO Diviner Lunar Radiometer Experiment</strong></div>
+          <div><span>Collection period</span><strong>${escapeHTML(NASA_DIVINER_MOSAIC.collectionPeriod)}</strong></div>
+          <div><span>Spatial coverage</span><strong>${escapeHTML(NASA_DIVINER_MOSAIC.spatialApplicability)}</strong></div>
+          <div><span>Limitations</span><strong>${escapeHTML(NASA_DIVINER_MOSAIC.limitations)}</strong></div>
+        </div>
+        <a class="button button-quiet nasa-source-link" href="https://pds-geosciences.wustl.edu/missions/lro/diviner.htm" target="_blank" rel="noreferrer">Open the NASA PDS Diviner archive <span aria-hidden="true">↗</span></a>
+      </section>
       <section class="panel">
         <div class="section-heading"><div><p class="eyebrow">MODEL CARD</p><h2>Illustrative engineering assumptions</h2></div><span class="tag tag-blue">VERSION 2</span></div>
         <div class="assumption-list">${assumptions.map((assumption, index) => `<div><span class="assumption-index">0${index + 1}</span><p>${escapeHTML(assumption)}</p></div>`).join('')}</div>
       </section>
       <div class="two-column-grid">
-        <section class="panel"><p class="eyebrow">DATA CLASSIFICATION</p><h2>Measured vs. modeled</h2><div class="legend-explainer"><div><span class="legend-swatch measured"></span><p><strong>Measured</strong><small>Observed by an instrument or published source. None is used in this build.</small></p></div><div><span class="legend-swatch simulated"></span><p><strong>Simulated</strong><small>Deterministic model output used to demonstrate cause and effect.</small></p></div><div><span class="legend-swatch assumption"></span><p><strong>Assumption</strong><small>An illustrative design input that is explicitly identified and documented.</small></p></div></div></section>
+      <section class="panel"><p class="eyebrow">DATA CLASSIFICATION</p><h2>Measured vs. modeled</h2><div class="legend-explainer"><div><span class="legend-swatch measured"></span><p><strong>Measured</strong><small>The NASA archive image above is an actual historical lunar-surface observation. It is read-only and not an in-habitat value.</small></p></div><div><span class="legend-swatch simulated"></span><p><strong>Simulated</strong><small>Mission resources, crew condition, and scenario effects are generated by the local educational model.</small></p></div><div><span class="legend-swatch assumption"></span><p><strong>Assumption</strong><small>An illustrative design input that is explicitly identified and documented.</small></p></div></div></section>
         <section class="panel"><p class="eyebrow">FUTURE DATA INTEGRATION</p><h2>Validation before visualization</h2><p class="body-copy">The application separates scenario generation, external-data adaptation, validation, mission calculations, and rendering. A verified dataset must be relevant to the specific variable; lunar surface measurements do not directly describe conditions inside a shielded habitat.</p></section>
       </div>
     `;
@@ -587,17 +713,26 @@ export function createApp(root) {
 
   function renderSettings() {
     return `
-      ${renderPageHeading('MISSION CONFIGURATION', 'Settings', 'Configure a new educational mission. Launching it replaces the currently saved mission in this browser.')}
+      ${renderPageHeading('MISSION CONFIGURATION', 'Settings', 'Adjust the active simulation rates and resource inventory. Active model settings affect upcoming operations; new mission settings replace current progress.')}
       <div class="settings-grid">
         <form class="panel config-form" id="mission-config">
           <div class="section-heading"><div><p class="eyebrow">MISSION PROFILE</p><h2>Scenario setup</h2></div><span class="tag tag-blue">SIMULATION MODE</span></div>
           <label>Mission duration <span class="input-with-unit"><input name="days" type="number" min="1" max="7" step="1" value="${appState.mission.duration}" required /><small>days · maximum 7</small></span></label>
           <label>Crew size <span class="input-with-unit"><input name="crew" type="number" min="1" max="4" step="1" value="${appState.mission.crew}" required /><small>astronauts · maximum 4</small></span></label>
           <label>Mission difficulty <select name="difficulty">${MISSION_DIFFICULTIES.map((difficulty) => `<option value="${escapeHTML(difficulty)}" ${appState.mission.difficulty === difficulty ? 'selected' : ''}>${escapeHTML(difficulty)}</option>`).join('')}</select><small>Difficulty scales modeled resource demand and radiation index.</small></label>
-          <div class="config-inventory"><p class="eyebrow">STARTING INVENTORY · SIMULATED</p><span>Oxygen 20,000 L</span><span>Water 110 L</span><span>Food 22 kg</span><span>Power 360 kWh</span><span>Battery 260 kWh</span></div>
+          <div class="config-inventory"><p class="eyebrow">STARTING INVENTORY · CONFIGURABLE</p>${renderStartingResourceFields(appState.mission.initialResources)}</div>
           <button class="button button-primary" type="submit">Launch new mission <span aria-hidden="true">→</span></button>
         </form>
-        <aside class="panel settings-side-note"><p class="eyebrow">CURRENT MISSION</p><h2>Day ${appState.mission.day} of ${appState.mission.duration}</h2><p class="body-copy">Current mission progress is stored in this browser. Starting another mission replaces that saved state.</p><button class="button button-quiet" type="button" data-action="save">Save current progress</button><button class="button button-danger" type="button" data-action="reset-mission">Reset current mission</button></aside>
+        <div class="settings-aside">
+          <form class="panel config-form model-controls-form" id="live-model-config">
+            <div class="section-heading"><div><p class="eyebrow">ACTIVE SIMULATION · DAY ${appState.mission.day}</p><h2>Mission model controls</h2></div><span class="tag tag-green">EDITABLE</span></div>
+            <p class="section-description">These assumptions drive the next day’s resource balance. Applying them preserves the mission’s past records.</p>
+            <div class="model-parameter-grid">${renderModelParameterFields(appState.mission.modelParameters ?? DEFAULT_MODEL_PARAMETERS)}</div>
+            <div class="model-preview" id="model-preview" aria-live="polite">${renderModelPreview(appState.mission.modelParameters, appState.mission.crew, appState.mission.difficulty)}</div>
+            <button class="button button-primary" type="submit">Apply to active mission</button>
+          </form>
+          <aside class="panel settings-side-note"><p class="eyebrow">CURRENT MISSION</p><h2>Day ${appState.mission.day} of ${appState.mission.duration}</h2><p class="body-copy">Current mission progress is stored in this browser. Starting another mission replaces that saved state.</p><button class="button button-quiet" type="button" data-action="save">Save current progress</button><button class="button button-danger" type="button" data-action="reset-mission">Reset current mission</button></aside>
+        </div>
       </div>
       <section class="panel preferences-panel"><div class="section-heading"><div><p class="eyebrow">DISPLAY</p><h2>Navigation preferences</h2></div></div><div class="preference-row"><div><strong>Compact sidebar</strong><p>Collapse the navigation to icon-only mode on wider screens.</p></div><button class="button button-quiet" type="button" data-action="toggle-sidebar">${appState.sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}</button></div></section>
     `;
@@ -742,10 +877,23 @@ export function createApp(root) {
     }
   });
 
+  root.addEventListener('input', (event) => {
+    if (!event.target.closest?.('#live-model-config')) return;
+    const form = root.querySelector('#live-model-config');
+    const preview = root.querySelector('#model-preview');
+    if (!form?.checkValidity() || !preview) return;
+    const modelParameters = getModelParameterValues(new FormData(form));
+    preview.innerHTML = renderModelPreview(modelParameters, appState.mission.crew, appState.mission.difficulty);
+  });
+
   root.addEventListener('submit', (event) => {
-    if (!event.target.matches('#mission-config')) return;
+    if (!event.target.matches('#mission-config, #live-model-config')) return;
     event.preventDefault();
-    startNewMission(new FormData(event.target));
+    if (event.target.matches('#mission-config')) {
+      startNewMission(new FormData(event.target));
+    } else {
+      applyCurrentModelParameters(new FormData(event.target));
+    }
   });
 
   globalThis.addEventListener?.('hashchange', () => {

@@ -26,7 +26,9 @@ npm run test
 
 ## Data provenance and scientific assumptions
 
-**SIMULATED DATA — NOT LIVE NASA DATA.** The current application does not acquire or display NASA measurements. Its values are deterministic educational estimates, not predictions, habitat specifications, flight telemetry, or safety guidance.
+**SIMULATED DATA — NOT LIVE NASA DATA.** Mission values are deterministic educational estimates, not predictions, habitat specifications, flight telemetry, or safety guidance. The Data Source page includes a bundled, archived NASA PDS Diviner lunar-surface temperature browse image for context only. It is not live or numeric mission data and does not affect the simulation.
+
+The reference product is LRO Diviner’s global high-resolution midnight bolometric-temperature browse mosaic, covering 70°S–70°N. Its PDS label states a collection period of 2009-07-05 through 2022-08-01. The rendered JPEG is not a calibrated numeric table, cabin temperature, or crew exposure measurement. See [docs/DATA_SOURCES.md](docs/DATA_SOURCES.md) for source links, provenance, scope, and limitations.
 
 The model assumptions live in `src/data/simulationConfig.js`; day-specific conditions and triggers are in `src/data/simulationDataGenerator.js`. The values are intentionally described as assumptions where a real vehicle specification is unavailable:
 
@@ -41,7 +43,7 @@ The model assumptions live in `src/data/simulationConfig.js`; day-specific condi
 | Cabin control targets | 101.3 kPa and 21 °C | Illustrative indoor targets, not live readings |
 | Radiation display | 0–100 relative index | Dimensionless teaching device; not a dose, forecast, or measurement |
 
-Starting inventories (20,000 L oxygen, 110 L water, 22 kg food, 360 kWh operational reserve, and 260 kWh backup battery) are scenario-design choices for a seven-day classroom exercise. They are not verified habitat capacities. Oxygen, water, food, and energy flows respond to crew activity, system efficiency, solar generation, and scripted equipment conditions; values are kept finite and non-negative.
+Starting inventories (20,000 L oxygen, 110 L water, 22 kg food, 360 kWh operational reserve, and 260 kWh backup battery) are scenario-design choices for a seven-day classroom exercise. In Settings, the commander can edit those starting inventories for a new mission and adjust the active simulation’s oxygen, water, food, power, solar-generation, and recycling assumptions. Model changes update the live baseline preview and affect upcoming operations; past history is preserved. Inputs are range-validated and never represent verified habitat capacities. Oxygen, water, food, and energy flows respond to crew activity, system efficiency, solar generation, and scripted equipment conditions; values are kept finite and non-negative.
 
 The event sequence is repeatable rather than random: nominal operations; reduced solar output; reduced water-recovery efficiency; communication interruption; an oxygen-line leak; elevated radiation risk; and reduced battery capacity/discharge capability. Each event states its trigger, one-day modeled duration, and response consequences. This is a fixed teaching sequence—not an event probability model or a lunar weather forecast. The radiation and crew-health model is especially simplified and must not be interpreted medically.
 
@@ -54,6 +56,7 @@ Exterior surface temperature is displayed as a scenario estimate separate from t
 - `src/data/simulationConfig.js` contains starting inventories, astronaut roster, and explicit assumptions. `src/data/placeholderData.js` remains as a compatibility re-export.
 - `src/data/simulationDataProvider.js` selects the local simulation provider.
 - `src/data/simulationDataGenerator.js` generates deterministic daily mission conditions.
+- `src/data/nasaDataCatalog.js` records provenance for the archived NASA PDS reference image.
 - `src/data/nasaDataAdapter.js` accepts external measurements only after explicit verification and required provenance metadata.
 - `src/data/dataValidator.js` validates mission state and external dataset metadata.
 - `src/data/unitConverter.js` converts a limited set of compatible engineering units.
@@ -61,7 +64,7 @@ Exterior surface temperature is displayed as a scenario estimate separate from t
 - `src/simulation/` applies the mission resource, crew, radiation, and emergency models.
 - `src/app.js` renders the UI and charts independently of data acquisition.
 
-NASA Data Mode remains unavailable because no compatible, verified dataset or acquisition source is integrated. The adapter does not invent NASA API responses, source names, measurements, or citations. Any future dataset must document its exact source and URL, units, collection period, spatial applicability, limitations, and intended use before it can be enabled.
+NASA mission-data mode remains unavailable because no compatible, verified data source is integrated into the mission calculations. The read-only NASA archive image does not make that mode available. The adapter does not invent NASA API responses, source names, measurements, or citations. Any future dataset must document its exact source and URL, units, collection period, spatial applicability, limitations, and intended use before it can be enabled.
 
 ## Deployment
 
