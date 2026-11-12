@@ -29,6 +29,8 @@ npm run test
 
 **SIMULATED DATA — NOT LIVE NASA DATA.** Mission values are educational estimates, not predictions, habitat specifications, flight telemetry, or safety guidance. The NASA Data Explorer includes a bundled, archived NASA PDS Diviner lunar-surface temperature browse image for context only. It is historical visual data, not live numeric mission data, and does not affect the simulation.
 
+Locally bundled NASA photographs, diagrams, and visualizations add mission context throughout the app. Each has a source credit and limitation; ISS imagery is not represented as lunar hardware, and real astronaut portraits are explicitly representative rather than the fictional crew. See [docs/DATA_SOURCES.md](docs/DATA_SOURCES.md).
+
 The reference product is LRO Diviner’s global high-resolution midnight bolometric-temperature browse mosaic, covering 70°S–70°N. Its PDS label states a collection period of 2009-07-05 through 2022-08-01. The rendered JPEG is not a calibrated numeric table, cabin temperature, or crew exposure measurement. See [docs/DATA_SOURCES.md](docs/DATA_SOURCES.md) for source links, provenance, scope, and limitations.
 
 The model assumptions live in `src/data/simulationConfig.js`; day-specific conditions and triggers are in `src/data/simulationDataGenerator.js`. The values are intentionally described as assumptions where a real vehicle specification is unavailable:

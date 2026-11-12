@@ -3,6 +3,7 @@ import { DEFAULT_CONFIG, DEFAULT_MODEL_PARAMETERS, MISSION_DIFFICULTIES, SIMULAT
 import { dataConfig, isNASADataModeAvailable } from './data/dataConfig.js';
 import { MODEL_PARAMETER_RANGES, RESOURCE_CAPACITIES, validateMissionState } from './data/dataValidator.js';
 import { NASA_DIVINER_MOSAIC } from './data/nasaDataCatalog.js';
+import { VISUAL_ASSETS } from './data/visualAssetCatalog.js';
 import { createScenarioSchedule, getScenarioForDay } from './data/simulationDataGenerator.js';
 import { readStoredMission, writeStoredMission } from './services/storageService.js';
 import {
@@ -98,6 +99,43 @@ function percentage(value, maximum) {
 
 function formatNumber(value, digits = 0) {
   return new Intl.NumberFormat('en-US', { maximumFractionDigits: digits }).format(Number(value) || 0);
+}
+
+function renderVisualImage(asset, className = '') {
+  return `
+    <div class="visual-media ${className}">
+      <img data-visual-image src="${escapeHTML(APP_BASE_PATH)}${escapeHTML(asset.path)}" alt="${escapeHTML(asset.alt)}" loading="lazy" decoding="async" />
+      <div class="visual-fallback" data-visual-fallback hidden role="img" aria-label="${escapeHTML(asset.title)} image unavailable">
+        <strong>Image unavailable</strong><span>${escapeHTML(asset.title)}</span>
+      </div>
+    </div>
+  `;
+}
+
+function renderVisualFigure(asset, className = '', context = asset.context) {
+  return `
+    <figure class="visual-figure ${className}">
+      ${renderVisualImage(asset)}
+      <figcaption>
+        <strong>${escapeHTML(asset.title)}</strong>
+        <span>${escapeHTML(context)}</span>
+        <small>${escapeHTML(asset.credit)} · <a href="${escapeHTML(asset.sourceUrl)}" target="_blank" rel="noreferrer">NASA source</a></small>
+      </figcaption>
+    </figure>
+  `;
+}
+
+function renderVisualFeature(asset, eyebrow, title, description, className = '') {
+  return `
+    <section class="panel visual-feature ${className}">
+      ${renderVisualFigure(asset)}
+      <div class="visual-feature-copy">
+        <p class="eyebrow">${escapeHTML(eyebrow)}</p>
+        <h2>${escapeHTML(title)}</h2>
+        <p>${escapeHTML(description)}</p>
+      </div>
+    </section>
+  `;
 }
 
 function getModelParameterValues(formData) {
@@ -619,8 +657,9 @@ export function createApp(root) {
       <button class="button button-primary" type="button" data-page="settings">Configure mission <span aria-hidden="true">↗</span></button>
     `;
     return `
-      ${renderPageHeading(`MISSION OVERVIEW · ${mission.day}/${mission.duration}`, 'Mission dashboard', 'A real-time view of crew, habitat reserves, and today’s scheduled scenario.', actions)}
+      ${renderPageHeading(`MISSION OVERVIEW · ${mission.day}/${mission.duration}`, 'Mission dashboard', 'A current view of crew, habitat reserves, and today’s scheduled scenario.', actions)}
       ${renderMissionControls()}
+      ${renderVisualFeature(VISUAL_ASSETS.earthrise, 'MISSION SETTING · ARCHIVED NASA IMAGE', 'Earthrise from lunar orbit', 'An LRO image provides lunar mission context. This archival photograph is not live mission telemetry or an input to the simulation.', 'dashboard-visual')}
       <div class="metric-grid">
         ${renderMetricCard('Mission day', `${String(mission.day).padStart(2, '0')} / ${String(mission.duration).padStart(2, '0')}`, 'DAY', `<span class="metric-dot"></span>${escapeHTML(mission.difficulty)} profile`)}
         ${renderMetricCard('Crew condition', `${Math.round(mission.astronauts.reduce((sum, member) => sum + member.health, 0) / mission.crew)}`, '%', 'Average crew health · educational model', 'green')}
@@ -668,6 +707,22 @@ export function createApp(root) {
         <div class="habitat-banner-copy"><span class="tag tag-green"><i></i> PRESSURIZED · NOMINAL</span><h2>Surface habitat · Shackleton Outpost</h2><p>Conceptual four-person habitat state for this classroom mission. This is a schematic illustration, not a modeled lunar base design.</p></div>
         <div class="habitat-banner-day"><span>LOCAL SIM TIME</span><strong>DAY ${String(appState.mission.day).padStart(2, '0')}</strong></div>
       </div>
+      <div class="visual-gallery habitat-visual-gallery">
+        ${renderVisualFigure(VISUAL_ASSETS.apolloSurface, 'visual-portrait')}
+        ${renderVisualFigure(VISUAL_ASSETS.gateway, 'visual-diagram')}
+        ${renderVisualFigure(VISUAL_ASSETS.issCrewQuarters)}
+        ${renderVisualFigure(VISUAL_ASSETS.missionControl)}
+      </div>
+      <section class="panel habitat-system-map">
+        <div class="section-heading"><div><p class="eyebrow">INTERACTIVE SYSTEM MAP</p><h2>Open a subsystem control page</h2></div><span class="tag tag-blue">SIMULATED SYSTEMS</span></div>
+        <div class="habitat-system-links">
+          <button type="button" data-page="oxygen"><strong>Oxygen storage & air loop</strong><span>Open modeled oxygen reserve →</span></button>
+          <button type="button" data-page="water"><strong>Water recovery</strong><span>Open modeled water balance →</span></button>
+          <button type="button" data-page="food"><strong>Packaged provisions</strong><span>Open crew food inventory →</span></button>
+          <button type="button" data-page="power"><strong>Solar & batteries</strong><span>Open modeled energy balance →</span></button>
+        </div>
+        <p class="data-caption"><span class="info-mark">i</span> These navigation controls lead to working simulator pages. NASA images are historical or conceptual references, not this habitat’s hardware.</p>
+      </section>
       <div class="system-grid">
         ${renderSystemCard('Solar array health', systems.solarPanels, '%', `Scenario output ${formatNumber(conditions.solarGeneration, 1)} kWh/day · illustrative 25 kW array`)}
         ${renderSystemCard('Water recycler', systems.recycler, '%', `Current recovery efficiency ${Math.round(conditions.recyclerEfficiency * 100)}% · scenario-based`)}
@@ -725,6 +780,12 @@ export function createApp(root) {
         <div class="section-heading"><div><p class="eyebrow">DAILY MODEL INPUTS</p><h2>Resource balance · Day ${mission.day}</h2></div><span class="tag tag-blue">EDUCATIONAL MODEL</span></div>
         <div class="data-table">${rows.map(([label, value, note]) => `<div><span>${escapeHTML(label)}</span><strong>${escapeHTML(value)}</strong><small>${escapeHTML(note)}</small></div>`).join('')}</div>
       </section>
+      <div class="visual-gallery life-support-visual-gallery">
+        ${renderVisualFigure(VISUAL_ASSETS.eclssFlow, 'visual-diagram')}
+        ${renderVisualFigure(VISUAL_ASSETS.waterRecoveryFlow, 'visual-diagram')}
+        ${renderVisualFigure(VISUAL_ASSETS.oxygenMaintenance)}
+        ${renderVisualFigure(VISUAL_ASSETS.waterRecoveryMaintenance)}
+      </div>
       <div class="two-column-grid">
         <section class="panel"><div class="section-heading"><div><p class="eyebrow">OXYGEN</p><h2>Metabolic demand</h2></div></div><p class="body-copy">Crew activity scales oxygen demand. The scenario’s leak fraction is applied to remaining reserve for the active period. No gas-loop physics, suit operations, or emergency oxygen generation is represented.</p></section>
         <section class="panel"><div class="section-heading"><div><p class="eyebrow">WATER</p><h2>Recovery & losses</h2></div></div><p class="body-copy">Gross water use is split into recovered water and net make-up. Filter malfunction lowers recovery for the scheduled scenario; it does not create water from waste.</p></section>
@@ -737,9 +798,17 @@ export function createApp(root) {
       ${renderPageHeading('CREW HEALTH & PERFORMANCE', 'Astronaut crew', 'A simplified educational model tracks crew health and fatigue. It is not a clinical assessment or medical decision tool.')}
       <div class="crew-summary-strip"><div><span>CREW COMPLEMENT</span><strong>${appState.mission.crew} <small>astronauts</small></strong></div><div><span>AVERAGE HEALTH</span><strong>${Math.round(appState.mission.astronauts.reduce((sum, person) => sum + person.health, 0) / appState.mission.crew)}<small>%</small></strong></div><div><span>AVERAGE FATIGUE</span><strong>${Math.round(appState.mission.astronauts.reduce((sum, person) => sum + person.fatigue, 0) / appState.mission.crew)}<small>%</small></strong></div><div><span>ACTIVE SCENARIO</span><strong>${escapeHTML(appState.mission.conditions.scenario.title)}</strong></div></div>
       <div class="crew-card-grid">
-        ${appState.mission.astronauts.map((astronaut, index) => `
+        ${appState.mission.astronauts.map((astronaut, index) => {
+          const portrait = [
+            VISUAL_ASSETS.crewCommander,
+            VISUAL_ASSETS.crewEngineer,
+            VISUAL_ASSETS.crewMedical,
+            VISUAL_ASSETS.crewScience
+          ][index];
+          return `
           <article class="panel astronaut-profile">
             <div class="astronaut-profile-head"><span class="portrait">${escapeHTML(astronaut.name.split(' ').map((part) => part[0]).join(''))}</span><span class="tag ${astronaut.health < 70 ? 'tag-amber' : 'tag-green'}">${escapeHTML(astronaut.status)}</span></div>
+            ${portrait ? renderVisualFigure(portrait, 'crew-portrait-figure') : ''}
             <p class="eyebrow">CREW MEMBER 0${index + 1}</p><h2>${escapeHTML(astronaut.name)}</h2><p class="crew-role">${escapeHTML(astronaut.role)}</p>
             <p class="body-copy">${escapeHTML(astronaut.profile ?? 'Mission crew member profile unavailable.')}</p>
             <p class="crew-role">Current activity: ${escapeHTML(astronaut.activity ?? 'Monitoring habitat systems')}</p>
@@ -748,7 +817,7 @@ export function createApp(root) {
             <div class="crew-measure"><div><span>Fatigue index</span><strong>${Math.round(astronaut.fatigue)}%</strong></div><div class="meter"><span class="meter-fill ${astronaut.fatigue > 65 ? 'warning' : 'healthy'}" style="width:${percentage(astronaut.fatigue, 100)}%"></span></div></div>
             <p class="data-caption"><span class="info-mark">i</span> ${escapeHTML(SIMULATION_PROFILE.label)}. Fatigue, activity, resource stress, and the relative radiation index affect this simplified model.</p>
           </article>
-        `).join('')}
+        `}).join('')}
       </div>
     `;
   }
@@ -788,6 +857,14 @@ export function createApp(root) {
         <section class="panel emergency-briefing">
           <div class="emergency-priority"><span class="warning-symbol" aria-hidden="true">!</span><div><p class="eyebrow">${escapeHTML(emergency.severity)} PRIORITY · DAY ${mission.day}</p><h2>${escapeHTML(emergency.title)}</h2></div><span class="tag tag-amber">ACTION REQUIRED</span></div>
           <p class="body-copy">${escapeHTML(emergency.description)}</p>
+          ${renderVisualFigure(({
+            'reduced-solar': VISUAL_ASSETS.solarRover,
+            'recycler-malfunction': VISUAL_ASSETS.waterRecoveryMaintenance,
+            'communications-interruption': VISUAL_ASSETS.gateway,
+            'oxygen-leak': VISUAL_ASSETS.oxygenMaintenance,
+            'solar-radiation-event': VISUAL_ASSETS.southPoleIllumination,
+            'battery-degradation': VISUAL_ASSETS.solarRover
+          })[scenario.id] ?? VISUAL_ASSETS.apolloSurface, 'emergency-reference', 'NASA image for system context only; it does not depict this scripted event. Event conditions and effects are simulated.')}
           <div class="emergency-meta"><div><span>TRIGGER / CAUSE</span><strong>${escapeHTML(scenario.trigger)}</strong></div><div><span>TIME SENSITIVITY</span><strong>${escapeHTML(emergency.timeSensitivity)}</strong></div><div><span>AFFECTED SYSTEMS</span><strong>${emergency.affectedSystems.map(escapeHTML).join(' · ')}</strong></div><div><span>SCENARIO DURATION</span><strong>${scenario.durationDays} simulated operations day</strong></div></div>
           <p class="data-caption"><span class="info-mark">i</span> ${escapeHTML(emergency.resolutionStatus)}. The flight engineer’s system-troubleshooting specialty can reduce the modeled power cost of a repair response; this skill model is illustrative.</p>
           <div class="decision-options emergency-options">
@@ -833,6 +910,7 @@ export function createApp(root) {
     return `
       ${renderPageHeading('MISSION CONTROL · COMMAND SUMMARY', 'Mission overview', 'A concise briefing of current objectives, crew, habitat reserves, and the next manual mission action.')}
       ${renderMissionControls()}
+      ${renderVisualFeature(VISUAL_ASSETS.apolloSurface, 'LUNAR SURFACE · HISTORICAL NASA PHOTOGRAPH', 'Apollo 17 field operations', 'A 1972 lunar surface photograph gives historical context for surface work. It does not depict the fictional LunarBase outpost or its current mission.', 'overview-visual')}
       <section class="panel overview-progress">
         <div class="section-heading"><div><p class="eyebrow">MISSION PROGRESS</p><h2>Day ${mission.day} of ${mission.duration}</h2></div><span class="tag ${mission.status === 'active' ? 'tag-blue' : 'tag-green'}">${escapeHTML(mission.status.toUpperCase())}</span></div>
         <div class="mission-progress-track" role="progressbar" aria-label="Completed mission days" aria-valuemin="0" aria-valuemax="${mission.duration}" aria-valuenow="${mission.history.filter((entry) => entry.label?.endsWith('end')).length}"><span style="width:${progress}%"></span></div>
@@ -909,6 +987,17 @@ export function createApp(root) {
     return `
       ${renderPageHeading('HABITAT RESOURCE CONTROL', details.title, details.description)}
       <div class="notice notice-blue"><span class="info-mark">i</span><p><strong>${escapeHTML(SIMULATION_PROFILE.label)}</strong><br />All rates are model outputs from documented educational assumptions and the active scenario.</p></div>
+      ${renderVisualFeature(({
+        oxygen: VISUAL_ASSETS.oxygenMaintenance,
+        water: VISUAL_ASSETS.waterRecoveryMaintenance,
+        food: VISUAL_ASSETS.spaceFood,
+        power: VISUAL_ASSETS.solarRover
+      })[resourceKey], 'SYSTEM REFERENCE · NASA IMAGE', `${resource.label} system context`, ({
+        oxygen: 'An ISS oxygen-generator maintenance image offers a real spacecraft-systems reference. It is not the equipment simulated here.',
+        water: 'An ISS water-recovery maintenance image illustrates hardware servicing. The model uses an educational recovery-efficiency assumption.',
+        food: 'A packaged ISS meal illustrates spaceflight food packaging. It does not define the simulator’s ration or nutrition assumptions.',
+        power: 'A NASA/JPL solar-powered rover prototype illustrates solar hardware. It was photographed on Earth and is not the modeled habitat array.'
+      })[resourceKey], 'resource-visual')}
       <div class="resource-detail-grid">
         <section class="panel resource-detail-primary"><p class="eyebrow">CURRENT INVENTORY</p><h2>${formatNumber(currentValue, resourceKey === 'water' ? 1 : 0)} <small>${escapeHTML(resource.unit)}</small></h2><div class="meter" role="progressbar" aria-label="${escapeHTML(resource.label)} remaining" aria-valuemin="0" aria-valuemax="${mission.initialResources[resourceKey]}" aria-valuenow="${currentValue}"><span class="meter-fill ${progress < 20 ? 'danger' : progress < 40 ? 'warning' : 'healthy'}" style="width:${progress}%"></span></div><p>${Math.round(progress)}% of configured starting ${escapeHTML(resource.label.toLowerCase())} inventory</p></section>
         <section class="panel resource-detail-stat"><p class="eyebrow">${resourceKey === 'power' ? 'NET ENERGY BALANCE' : 'ESTIMATED DAILY USE'}</p><h2>${resourceKey === 'power' ? `${dailyBalance >= 0 ? '+' : ''}${formatNumber(dailyBalance, 1)} kWh/day` : `${formatNumber(grossDemand, resourceKey === 'food' || resourceKey === 'water' ? 2 : 0)} ${escapeHTML(resource.unit)}/day`}</h2><p>${resourceKey === 'power' ? 'Solar generation minus modeled electrical demand' : `${escapeHTML(SIMULATION_PROFILE.label)} · active scenario included`}</p></section>
@@ -987,6 +1076,7 @@ export function createApp(root) {
     return `
       ${renderPageHeading('LUNAR ENVIRONMENT · HABITAT CONTEXT', 'Lunar surface conditions', 'Separate the modeled exterior surface scenario from the controlled cabin targets. Archived Diviner observations are explored on the NASA Data Explorer page.')}
       <div class="notice notice-amber"><span class="info-mark">!</span><p><strong>Scenario estimate, not live surface telemetry.</strong> The current exterior temperature value is a scripted educational scenario input. It does not represent a habitat interior reading.</p></div>
+      ${renderVisualFigure(VISUAL_ASSETS.apolloSurface, 'surface-visual')}
       <div class="environment-readings">
         <div><span>Exterior surface temperature · scenario</span><strong>${formatNumber(mission.conditions.environment.surfaceTemperatureC)} °C</strong><em>SIMULATED DATA</em></div>
         <div><span>Cabin temperature target</span><strong>${formatNumber(mission.conditions.environment.cabinTemperatureC, 1)} °C</strong><em>ILLUSTRATIVE ASSUMPTION</em></div>
@@ -1002,6 +1092,7 @@ export function createApp(root) {
     return `
       ${renderPageHeading('LUNAR ENVIRONMENT · POWER CONTEXT', 'Sunlight and shadow', 'See how the educational scenario schedule changes the modeled solar input. No illumination map or real-time solar forecast is included in this simulation.')}
       <div class="notice notice-blue"><span class="info-mark">i</span><p><strong>${escapeHTML(SIMULATION_PROFILE.label)}</strong><br />The power estimate is an illustrative array-output assumption adjusted by scripted scenario factors. It is not calculated from lunar terrain, date, panel orientation, or live illumination.</p></div>
+      ${renderVisualFigure(VISUAL_ASSETS.southPoleIllumination, 'sunlight-visual')}
       <section class="panel"><div class="section-heading"><div><p class="eyebrow">SIMULATED ARRAY OUTPUT</p><h2>Day-by-day solar scenario factors</h2></div><span class="tag tag-amber">ILLUSTRATIVE ASSUMPTION</span></div>
         <div class="table-scroll"><table><thead><tr><th>DAY</th><th>SCENARIO</th><th>MODELED FACTOR</th><th>MODELED GENERATION</th><th>DATA TYPE</th></tr></thead><tbody>${schedule.map((day) => {
           const scenario = getScenarioForDay(day, mission.scenarioSchedule);
@@ -1040,6 +1131,7 @@ export function createApp(root) {
           <div><span>Use / limitations</span><strong>${escapeHTML(NASA_DIVINER_MOSAIC.limitations)}</strong></div>
         </div>
       </section>
+      ${renderVisualFigure(VISUAL_ASSETS.southPoleIllumination, 'explorer-visual')}
       <section class="panel">
         <div class="section-heading"><div><p class="eyebrow">NASA DATA STATUS</p><h2>Integrated vs. linked sources</h2></div><span class="tag tag-amber">MODE B UNAVAILABLE</span></div>
         <div class="dataset-status-list">
@@ -1297,6 +1389,13 @@ export function createApp(root) {
       image.addEventListener('error', () => {
         const status = root.querySelector('[data-nasa-image-status]');
         if (status) status.textContent = 'The bundled NASA image failed to load. Mission simulation remains available in Simulation Mode; no substitute data is shown.';
+      }, { once: true });
+    });
+    root.querySelectorAll('[data-visual-image]').forEach((image) => {
+      image.addEventListener('error', () => {
+        image.hidden = true;
+        const fallback = image.parentElement.querySelector('[data-visual-fallback]');
+        if (fallback) fallback.hidden = false;
       }, { once: true });
     });
     drawChart();
