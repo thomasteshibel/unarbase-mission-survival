@@ -1,0 +1,182 @@
+[
+  {
+    "id": "desktop_1920_dashboard",
+    "w": 1920,
+    "h": 1080,
+    "hash": "#dashboard",
+    "label": "Large Desktop (1920px) — Mission Dashboard",
+    "size": 787297,
+    "file": "desktop_1920_dashboard.png",
+    "status": "PASS"
+  },
+  {
+    "id": "desktop_1920_nasa_explorer",
+    "w": 1920,
+    "h": 1080,
+    "hash": "#nasa-explorer",
+    "label": "Large Desktop (1920px) — NASA Data Explorer",
+    "size": 632320,
+    "file": "desktop_1920_nasa_explorer.png",
+    "status": "PASS"
+  },
+  {
+    "id": "desktop_1920_life_support",
+    "w": 1920,
+    "h": 1080,
+    "hash": "#life-support",
+    "label": "Large Desktop (1920px) — Life Support / ECLSS",
+    "size": 793259,
+    "file": "desktop_1920_life_support.png",
+    "status": "PASS"
+  },
+  {
+    "id": "desktop_1920_crew",
+    "w": 1920,
+    "h": 1080,
+    "hash": "#crew",
+    "label": "Large Desktop (1920px) — Crew Health & Profiles",
+    "size": 728189,
+    "file": "desktop_1920_crew.png",
+    "status": "PASS"
+  },
+  {
+    "id": "desktop_1920_emergencies",
+    "w": 1920,
+    "h": 1080,
+    "hash": "#emergencies",
+    "label": "Large Desktop (1920px) — Emergency Management",
+    "size": 482213,
+    "file": "desktop_1920_emergencies.png",
+    "status": "PASS"
+  },
+  {
+    "id": "desktop_1920_settings",
+    "w": 1920,
+    "h": 1080,
+    "hash": "#settings",
+    "label": "Large Desktop (1920px) — Settings & Assumptions",
+    "size": 645441,
+    "file": "desktop_1920_settings.png",
+    "status": "PASS"
+  },
+  {
+    "id": "desktop_1920_report",
+    "w": 1920,
+    "h": 1080,
+    "hash": "#report",
+    "label": "Large Desktop (1920px) — Mission Report",
+    "size": 646231,
+    "file": "desktop_1920_report.png",
+    "status": "PASS"
+  },
+  {
+    "id": "desktop_1920_timeline",
+    "w": 1920,
+    "h": 1080,
+    "hash": "#timeline",
+    "label": "Large Desktop (1920px) — Mission Timeline",
+    "size": 598723,
+    "file": "desktop_1920_timeline.png",
+    "status": "PASS"
+  },
+  {
+    "id": "laptop_1366_dashboard",
+    "w": 1366,
+    "h": 768,
+    "hash": "#dashboard",
+    "label": "Laptop (1366px) — Mission Dashboard",
+    "size": 507099,
+    "file": "laptop_1366_dashboard.png",
+    "status": "PASS"
+  },
+  {
+    "id": "laptop_1366_nasa_explorer",
+    "w": 1366,
+    "h": 768,
+    "hash": "#nasa-explorer",
+    "label": "Laptop (1366px) — NASA Data Explorer",
+    "size": 440853,
+    "file": "laptop_1366_nasa_explorer.png",
+    "status": "PASS"
+  },
+  {
+    "id": "tablet_768_dashboard",
+    "w": 768,
+    "h": 1024,
+    "hash": "#dashboard",
+    "label": "Tablet (768px) — Mission Dashboard",
+    "size": 404267,
+    "file": "tablet_768_dashboard.png",
+    "status": "PASS"
+  },
+  {
+    "id": "tablet_768_life_support",
+    "w": 768,
+    "h": 1024,
+    "hash": "#life-support",
+    "label": "Tablet (768px) — Life Support / ECLSS",
+    "size": 333492,
+    "file": "tablet_768_life_support.png",
+    "status": "PASS"
+  },
+  {
+    "id": "tablet_768_emergencies",
+    "w": 768,
+    "h": 1024,
+    "hash": "#emergencies",
+    "label": "Tablet (768px) — Emergency Procedures",
+    "size": 357077,
+    "file": "tablet_768_emergencies.png",
+    "status": "PASS"
+  },
+  {
+    "id": "mobile_390_dashboard",
+    "w": 390,
+    "h": 844,
+    "hash": "#dashboard",
+    "label": "Mobile (390px) — Mission Dashboard",
+    "size": 229972,
+    "file": "mobile_390_dashboard.png",
+    "status": "PASS"
+  },
+  {
+    "id": "mobile_390_nasa_explorer",
+    "w": 390,
+    "h": 844,
+    "hash": "#nasa-explorer",
+    "label": "Mobile (390px) — NASA Data Explorer",
+    "size": 173277,
+    "file": "mobile_390_nasa_explorer.png",
+    "status": "PASS"
+  },
+  {
+    "id": "mobile_390_crew",
+    "w": 390,
+    "h": 844,
+    "hash": "#crew",
+    "label": "Mobile (390px) — Crew Health Cards",
+    "size": 256649,
+    "file": "mobile_390_crew.png",
+    "status": "PASS"
+  },
+  {
+    "id": "small_mobile_320_dashboard",
+    "w": 320,
+    "h": 568,
+    "hash": "#dashboard",
+    "label": "Small Mobile (320px) — Mission Dashboard",
+    "size": 116963,
+    "file": "small_mobile_320_dashboard.png",
+    "status": "PASS"
+  },
+  {
+    "id": "small_mobile_320_life_support",
+    "w": 320,
+    "h": 568,
+    "hash": "#life-support",
+    "label": "Small Mobile (320px) — Life Support",
+    "size": 91770,
+    "file": "small_mobile_320_life_support.png",
+    "status": "PASS"
+  }
+]

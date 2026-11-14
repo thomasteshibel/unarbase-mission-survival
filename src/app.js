@@ -17,6 +17,22 @@ import {
   updateMissionModelParameters
 } from './simulation/missionEngine.js';
 import { getDailyResourceNeeds } from './simulation/resourceSystem.js';
+import { renderNASAExplorerView } from './views/nasaExplorerView.js';
+import {
+  renderRadiationFieldGuide,
+  renderCrewHealthFieldGuide,
+  renderLifeSupportFieldGuide,
+  renderSurfaceFieldGuide
+} from './views/fieldGuideView.js';
+import { getSpaceWeatherData, getNasaApiKey, setNasaApiKey } from './data/api/donkiClient.js';
+import { searchOSDRStudies } from './data/api/osdrClient.js';
+import { getRadLabDosimetryData } from './data/api/radlabClient.js';
+import { clearAllNasaCache } from './data/cacheService.js';
+import { CURATED_DONKI_SPACE_WEATHER } from './data/curated/donkiEvents.js';
+import { CURATED_OSDR_STUDIES } from './data/curated/osdrStudies.js';
+import { RADLAB_DOSIMETRY_RECORDS, RADIATION_BENCHMARK_SCALE } from './data/curated/radlabRecords.js';
+import { createProvenanceRecord, DATA_CATEGORIES } from './data/provenance.js';
+import { fetchJson } from './data/api/apiClient.js';
 
 const NAVIGATION = [
   { id: 'overview', label: 'Mission Overview', icon: '◫', group: 'MISSION CONTROL' },
@@ -297,7 +313,84 @@ export function createApp(root) {
     toast: restoreError ? { message: `${restoreError} Start a new mission or load a valid saved mission.`, tone: 'error' } : '',
     selectedDecision: 'normal',
     sidebarCollapsed: getSidebarCollapsedPreference(),
-    drawerOpen: false
+    drawerOpen: false,
+    explorerTab: 'donki',
+    donkiState: {
+      eventType: 'all',
+      startDate: '2024-05-01',
+      endDate: '2024-05-20',
+      loading: false,
+      apiKeyType: getNasaApiKey() === 'DEMO_KEY' ? 'DEMO_KEY' : 'CUSTOM_KEY',
+      data: {
+        flares: [...CURATED_DONKI_SPACE_WEATHER.flares],
+        cme: [...CURATED_DONKI_SPACE_WEATHER.cme],
+        sep: [...CURATED_DONKI_SPACE_WEATHER.sep],
+        geomagneticStorms: [...CURATED_DONKI_SPACE_WEATHER.geomagneticStorms],
+        dataSource: 'curated_nasa_archive',
+        provenance: createProvenanceRecord({
+          datasetName: 'NASA Space Weather Database Of Notifications, Knowledge, Information (DONKI)',
+          source: 'NASA Community Coordinated Modeling Center (CCMC) & SWPC',
+          sourceUrl: 'https://ccmc.gsfc.nasa.gov/tools/DONKI/',
+          retrievalTimestamp: new Date().toISOString(),
+          collectionPeriod: '2024-05-01 to 2024-05-20',
+          spatialApplicability: 'Sun-Earth-Moon Heliospheric System (1 AU)',
+          temporalApplicability: 'Real-time observation alerts and modeled heliospheric simulations',
+          units: { flareClass: 'GOES X-ray W/m²', cmeSpeed: 'km/s', kpIndex: '0.0–9.0' },
+          description: 'Heliophysics records of solar flares, coronal mass ejections, and solar energetic proton events.',
+          limitations: 'Events describe space weather in the heliosphere; they do NOT equal inside-habitat radiation doses without regolith shielding models.',
+          category: DATA_CATEGORIES.REAL_NASA_DATA
+        })
+      },
+      errorNotice: null
+    },
+    osdrState: {
+      query: '',
+      loading: false,
+      data: {
+        query: '',
+        totalHits: CURATED_OSDR_STUDIES.length,
+        studies: [...CURATED_OSDR_STUDIES],
+        dataSource: 'curated_nasa_archive',
+        errorNotice: null,
+        provenance: createProvenanceRecord({
+          datasetName: 'NASA Open Science Data Repository (OSDR) Space Biology Research',
+          source: 'NASA Biological and Physical Sciences (BPS) Division',
+          sourceUrl: 'https://osdr.nasa.gov/bio/repo/',
+          retrievalTimestamp: new Date().toISOString(),
+          collectionPeriod: '2012 to 2024 archived flight and ground experiments',
+          spatialApplicability: 'Low Earth Orbit (ISS) and ground analog laboratories',
+          temporalApplicability: 'Archived peer-reviewed flight investigations',
+          units: { accession: 'string identifier', hits: 'count' },
+          description: 'Peer-reviewed space biology datasets on musculoskeletal, immune, circadian, and genomic adaptations to spaceflight.',
+          limitations: 'Research findings describe model organisms or specific flight cohorts; they do not represent real-time physiological measurements of the fictional LunarBase crew.',
+          category: DATA_CATEGORIES.RESEARCH_EVIDENCE
+        })
+      },
+      errorNotice: null
+    },
+    radlabState: {
+      loading: false,
+      data: {
+        records: [...RADLAB_DOSIMETRY_RECORDS],
+        benchmarks: [...RADIATION_BENCHMARK_SCALE],
+        dataSource: 'curated_nasa_archive',
+        errorNotice: null,
+        provenance: createProvenanceRecord({
+          datasetName: 'NASA RadLab Space Radiation Dosimetry Repository',
+          source: 'NASA OSDR & Space Radiation Analysis Group (SRAG)',
+          sourceUrl: 'https://visualization.osdr.nasa.gov/radlab/gui/data-api/',
+          retrievalTimestamp: new Date().toISOString(),
+          collectionPeriod: '2012 to 2019 measured missions (ISS, MSL RAD, Lunar Surface benchmark)',
+          spatialApplicability: 'Low Earth Orbit (ISS Columbus and Service Modules), Interplanetary Cruise (MSL), Mars Surface (Gale Crater), and Lunar Surface',
+          temporalApplicability: 'Flight sensor observation periods',
+          units: { absorbedDoseRateUGyDay: 'μGy/day', doseEquivalentRateUSvDay: 'μSv/day', let: 'keV/μm' },
+          description: 'Physical radiation dosimetry records measuring absorbed dose rate and dose equivalent rate using semiconductor spectrometers, TEPCs, and scintillator telescopes.',
+          limitations: 'Measures external spaceflight environments and orbital stations; cannot be equated to lunar habitat interior doses without validated shielding transport models.',
+          category: DATA_CATEGORIES.REAL_NASA_DATA
+        })
+      },
+      errorNotice: null
+    }
   };
 
   function navigate(page) {
@@ -313,6 +406,57 @@ export function createApp(root) {
 
   function setToast(message, tone = 'info') {
     appState.toast = message ? { message, tone } : '';
+  }
+
+  async function triggerDonkiFetch(forceRefresh = true) {
+    appState.donkiState.loading = true;
+    render();
+    try {
+      const res = await getSpaceWeatherData({
+        eventType: appState.donkiState.eventType,
+        startDate: appState.donkiState.startDate,
+        endDate: appState.donkiState.endDate,
+        forceRefresh
+      });
+      appState.donkiState.data = res;
+      appState.donkiState.errorNotice = res.errorNotice || null;
+      if (res.dataSource === 'live_nasa_api') {
+        setToast('Successfully retrieved live space weather observations from NASA DONKI!', 'success');
+      } else {
+        setToast('Loaded verified NASA historical space weather archive (offline mode).', 'info');
+      }
+    } catch (err) {
+      appState.donkiState.errorNotice = {
+        message: err.message,
+        errorType: err.name || 'API_ERROR'
+      };
+      setToast(`NASA DONKI API request: ${err.message}`, 'error');
+    } finally {
+      appState.donkiState.loading = false;
+      render();
+    }
+  }
+
+  async function triggerOsdrSearch(query, forceRefresh = false) {
+    appState.osdrState.query = query;
+    appState.osdrState.loading = true;
+    render();
+    try {
+      const res = await searchOSDRStudies(query, { forceRefresh });
+      appState.osdrState.data = res;
+      appState.osdrState.errorNotice = res.errorNotice || null;
+      if (res.dataSource === 'live_nasa_api') {
+        setToast(`Found ${res.totalHits} study records from live NASA OSDR search.`, 'success');
+      }
+    } catch (err) {
+      appState.osdrState.errorNotice = {
+        message: err.message,
+        errorType: err.name || 'API_ERROR'
+      };
+    } finally {
+      appState.osdrState.loading = false;
+      render();
+    }
   }
 
   function persistMission() {
@@ -790,6 +934,7 @@ export function createApp(root) {
         <section class="panel"><div class="section-heading"><div><p class="eyebrow">OXYGEN</p><h2>Metabolic demand</h2></div></div><p class="body-copy">Crew activity scales oxygen demand. The scenario’s leak fraction is applied to remaining reserve for the active period. No gas-loop physics, suit operations, or emergency oxygen generation is represented.</p></section>
         <section class="panel"><div class="section-heading"><div><p class="eyebrow">WATER</p><h2>Recovery & losses</h2></div></div><p class="body-copy">Gross water use is split into recovered water and net make-up. Filter malfunction lowers recovery for the scheduled scenario; it does not create water from waste.</p></section>
       </div>
+      ${renderLifeSupportFieldGuide()}
     `;
   }
 
@@ -843,6 +988,7 @@ export function createApp(root) {
           <div class="data-caption"><span class="info-mark">i</span> Lunar surface radiation depends on particle spectra, shielding geometry, and mission timing. This model does not resolve those conditions.</div>
         </section>
       </div>
+      ${renderRadiationFieldGuide()}
       ${renderDecisionPlanner()}
     `;
   }
@@ -1031,6 +1177,7 @@ export function createApp(root) {
         <div class="table-scroll"><table><thead><tr><th>ASTRONAUT</th><th>ROLE</th><th>HEALTH INDEX</th><th>FATIGUE INDEX</th><th>STATUS</th></tr></thead><tbody>${mission.astronauts.map((person) => `<tr><td>${escapeHTML(person.name)}</td><td>${escapeHTML(person.role)}</td><td>${formatNumber(person.health)}%</td><td>${formatNumber(person.fatigue)}%</td><td>${escapeHTML(person.status)}</td></tr>`).join('')}</tbody></table></div>
       </section>
       <section class="panel"><div class="section-heading"><div><p class="eyebrow">CREW HEALTH HISTORY</p><h2>Recorded average health index</h2></div><span class="tag tag-blue">SIMULATED</span></div><div class="chart-wrap chart-large"><canvas id="crew-health-chart" aria-label="Average simulated crew health index by recorded mission day"></canvas></div><div class="table-scroll"><table><thead><tr><th>MISSION RECORD</th><th>DAY</th><th>AVERAGE HEALTH INDEX</th><th>SCENARIO</th></tr></thead><tbody>${mission.history.map((entry) => `<tr><td>${escapeHTML(entry.label ?? 'Mission record')}</td><td>${entry.day}</td><td>${formatNumber(entry.averageCrewHealth ?? 100, 1)}%</td><td>${escapeHTML(entry.scenarioTitle ?? 'Mission start')}</td></tr>`).join('')}</tbody></table></div><p class="data-caption"><span class="info-mark">i</span> The model uses simplified workload, resource-stress, and scenario inputs. It does not predict medical effects or represent individual biological responses.</p></section>
+      ${renderCrewHealthFieldGuide()}
     `;
   }
 
@@ -1083,6 +1230,7 @@ export function createApp(root) {
         <div><span>Cabin pressure target</span><strong>${formatNumber(mission.conditions.environment.cabinPressureKPa, 1)} kPa</strong><em>ILLUSTRATIVE ASSUMPTION</em></div>
       </div>
       <section class="panel"><div class="section-heading"><div><p class="eyebrow">ACTIVE ENVIRONMENTAL SCENARIO</p><h2>${escapeHTML(mission.conditions.scenario.title)}</h2></div><span class="tag tag-blue">DAY ${mission.day}</span></div><p class="body-copy">${escapeHTML(mission.conditions.scenario.trigger)}</p><p class="body-copy">Surface temperature varies substantially with location, time, terrain, and illumination. A surface measurement cannot be treated as an indoor habitat temperature; the cabin values displayed here are example control targets, not telemetry.</p><button class="button button-quiet" type="button" data-page="nasa-explorer">Explore archived NASA observations <span aria-hidden="true">→</span></button></section>
+      ${renderSurfaceFieldGuide()}
     `;
   }
 
@@ -1111,37 +1259,7 @@ export function createApp(root) {
   }
 
   function renderNASAExplorer() {
-    return `
-      ${renderPageHeading('ARCHIVED SCIENCE · SOURCE-AWARE EXPLORER', 'NASA Data Explorer', 'Browse a locally bundled, historical NASA LRO Diviner surface observation and inspect its source, time coverage, representation, and limits. It does not control habitat calculations.')}
-      <div class="notice notice-green"><span class="info-mark">✓</span><p><strong>NASA data successfully integrated: one historical browse image.</strong><br />The mission simulation remains in Simulation Mode. The NASA observation is a real archived surface product, not live or numeric in-habitat data.</p></div>
-      <p class="dataset-load-status" data-nasa-image-status role="status">Diviner browse image is bundled locally and will be checked when displayed.</p>
-      <section class="panel nasa-observation">
-        <div class="section-heading"><div><p class="eyebrow">REAL NASA DATA — HISTORICAL MEASUREMENTS</p><h2>${escapeHTML(NASA_DIVINER_MOSAIC.title)}</h2></div><span class="tag tag-blue">BUNDLED BROWSE IMAGE</span></div>
-        <p class="body-copy">This is the actual PDS JPEG browse rendering linked to an underlying derived Diviner data product. The image is bundled locally and will display offline. Numeric pixel measurements are not extracted or used by the simulator.</p>
-        <figure class="nasa-figure">
-          <a href="${escapeHTML(NASA_DIVINER_MOSAIC.sourceUrl)}" target="_blank" rel="noreferrer"><img data-nasa-image src="${escapeHTML(APP_BASE_PATH)}${escapeHTML(NASA_DIVINER_MOSAIC.localImagePath)}" alt="${escapeHTML(NASA_DIVINER_MOSAIC.localImageAlt)}" loading="lazy" /></a>
-          <figcaption>${escapeHTML(NASA_DIVINER_MOSAIC.datasetName)} · NASA Planetary Data System Geosciences Node · <a href="${escapeHTML(NASA_DIVINER_MOSAIC.metadataUrl)}" target="_blank" rel="noreferrer">Open PDS product label</a></figcaption>
-        </figure>
-        <div class="nasa-metadata-grid">
-          <div><span>Mission / instrument</span><strong>Lunar Reconnaissance Orbiter / Diviner Lunar Radiometer Experiment</strong></div>
-          <div><span>Measurement</span><strong>Bolometric temperature at midnight; rendered browse product</strong></div>
-          <div><span>Collection period</span><strong>${escapeHTML(NASA_DIVINER_MOSAIC.collectionPeriod)}</strong></div>
-          <div><span>Spatial coverage</span><strong>${escapeHTML(NASA_DIVINER_MOSAIC.spatialApplicability)}</strong></div>
-          <div><span>Units</span><strong>Browse JPEG only; no calibrated numeric table or units are extracted</strong></div>
-          <div><span>Use / limitations</span><strong>${escapeHTML(NASA_DIVINER_MOSAIC.limitations)}</strong></div>
-        </div>
-      </section>
-      ${renderVisualFigure(VISUAL_ASSETS.southPoleIllumination, 'explorer-visual')}
-      <section class="panel">
-        <div class="section-heading"><div><p class="eyebrow">NASA DATA STATUS</p><h2>Integrated vs. linked sources</h2></div><span class="tag tag-amber">MODE B UNAVAILABLE</span></div>
-        <div class="dataset-status-list">
-          <div><span class="tag tag-green">INTEGRATED · LOCAL FILE</span><div><h3>LRO Diviner derived browse mosaic</h3><p>Verified PDS label and locally bundled JPEG. Historical lunar-surface context only; not wired into habitat simulation.</p></div></div>
-          <div><span class="tag tag-muted">SOURCE LINK · NOT INTEGRATED</span><div><h3>LRO CRaTER archive</h3><p>Official instrument bundle is linked for exploration. No calibrated CRaTER measurements are currently bundled or adapted into the habitat model.</p><a href="https://pds.nasa.gov/ds-view/pds/viewBundle.jsp?identifier=urn%3Anasa%3Apds%3Alro-crater&amp;version=1.6" target="_blank" rel="noreferrer">Open NASA PDS CRaTER bundle <span aria-hidden="true">↗</span></a></div></div>
-          <div><span class="tag tag-muted">VISUALIZATION LINK · NOT INTEGRATED</span><div><h3>South-pole illumination / LOLA context</h3><p>NASA SVS describes a 2025–2028 lighting visualization based on LRO LOLA terrain and JPL DE421 ephemeris. Its frame data are not bundled or used for power predictions here.</p><a href="https://svs.gsfc.nasa.gov/5027" target="_blank" rel="noreferrer">Open NASA SVS 5027 source <span aria-hidden="true">↗</span></a></div></div>
-        </div>
-        <div class="unavailable-reason"><strong>Why NASA Data Mode cannot run the mission</strong><span>Available archive content is surface context, not compatible cabin telemetry, life-support demand, or shielded crew dose. NASA data never replaces simulated mission values.</span></div>
-      </section>
-    `;
+    return renderNASAExplorerView(appState, APP_BASE_PATH);
   }
 
   function renderAnalytics() {
@@ -1183,6 +1301,24 @@ export function createApp(root) {
         <div class="section-heading"><div><p class="eyebrow">RESOURCE USE</p><h2>Remaining inventory</h2></div><button class="text-action" type="button" data-page="analytics">Open analytics <span aria-hidden="true">→</span></button></div>
         <div class="report-resource-list">${Object.entries(report.remainingResources).map(([key, value]) => `<div><span>${escapeHTML(key)}</span><strong>${formatNumber(value, 1)} <small>${key === 'oxygen' ? 'L' : key === 'water' ? 'L' : key === 'food' ? 'kg' : 'kWh'}</small></strong></div>`).join('')}</div>
         <div class="report-lessons"><p class="eyebrow">LESSONS LEARNED</p><ul>${report.lessons.map((lesson) => `<li>${escapeHTML(lesson)}</li>`).join('')}</ul></div>
+        <div class="report-lessons" style="margin-top: 14px; border-top: 1px solid var(--line); padding-top: 12px;">
+          <p class="eyebrow" style="color: #9fe2be;">JUNIOR ASTRONAUT SCIENTIFIC LEARNING OUTCOMES</p>
+          <ul style="margin: 8px 0; padding-left: 18px; color: #a4bbc7; font-size: 11px; line-height: 1.6;">
+            <li><strong>Closed-Loop ECLSS Operations:</strong> Gained hands-on understanding of metabolic oxygen demand (588 L/day), gross water recycling, and operational life-support margins.</li>
+            <li><strong>Space Radiation & Habitat Shielding:</strong> Learned to distinguish heliospheric space weather (CMEs, solar flares) from inside-habitat radiation doses, and why regolith mass shielding (1.5–2m) is essential for lunar surface survival.</li>
+            <li><strong>Human Spaceflight Physiology:</strong> Explored why microgravity and 1/6th gravity cause rapid bone demineralization (~1%/mo) and postural muscle atrophy without rigorous daily countermeasure workouts.</li>
+            <li><strong>Polar Illumination Dynamics:</strong> Analyzed why lunar south-pole peaks of eternal light offer high solar availability while adjacent permanently shadowed craters trap critical volatile ice reserves.</li>
+          </ul>
+        </div>
+        <div style="margin-top: 14px; padding: 12px; border-radius: 6px; background: rgba(5,16,26,.6); border: 1px solid rgba(102,217,232,.18);">
+          <p class="eyebrow" style="margin: 0 0 6px;">GENUINE NASA OPEN DATASETS & ARCHIVES CONSULTED</p>
+          <div style="display: flex; flex-wrap: wrap; gap: 8px;">
+            <button type="button" class="explorer-btn" data-page="nasa-explorer" data-explorer-target-tab="donki">NASA DONKI Space Weather ↗</button>
+            <button type="button" class="explorer-btn" data-page="nasa-explorer" data-explorer-target-tab="osdr">NASA OSDR Space Biology ↗</button>
+            <button type="button" class="explorer-btn" data-page="nasa-explorer" data-explorer-target-tab="radlab">NASA RadLab Dosimetry ↗</button>
+            <button type="button" class="explorer-btn" data-page="nasa-explorer" data-explorer-target-tab="surface">NASA LRO Diviner PDS ↗</button>
+          </div>
+        </div>
         <p class="data-caption"><span class="info-mark">i</span> ${escapeHTML(report.dataNotice)}. Outcomes are pedagogical only and do not establish real mission safety or feasibility.</p>
       </section>
     `;
@@ -1252,6 +1388,42 @@ export function createApp(root) {
         </div>
       </div>
       <section class="panel preferences-panel"><div class="section-heading"><div><p class="eyebrow">DISPLAY</p><h2>Navigation preferences</h2></div></div><div class="preference-row"><div><strong>Compact sidebar</strong><p>Collapse the navigation to icon-only mode on wider screens.</p></div><button class="button button-quiet" type="button" data-action="toggle-sidebar">${appState.sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}</button></div></section>
+      <section class="panel" style="margin-top: 16px;">
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">NASA OPEN DATA INTEGRATION</p>
+            <h2>NASA Open API Configuration & Key Management</h2>
+          </div>
+          <span class="tag ${getNasaApiKey() === 'DEMO_KEY' ? 'tag-amber' : 'tag-green'}">
+            ${getNasaApiKey() === 'DEMO_KEY' ? 'DEMO_KEY ACTIVE' : 'CUSTOM KEY CONFIGURED'}
+          </span>
+        </div>
+        <p class="section-description">
+          Configure an optional personal NASA API key from <a href="https://api.nasa.gov/" target="_blank" rel="noreferrer" style="color: #88dce5; text-decoration: underline;">api.nasa.gov</a>.
+          By default, LunarBase uses NASA's public DEMO_KEY (subject to hourly IP limits).
+        </p>
+
+        <div style="display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin: 14px 0;">
+          <input
+            type="text"
+            class="explorer-search-input"
+            style="flex: 1; min-width: 260px;"
+            placeholder="Enter NASA API Key (leave empty to revert to DEMO_KEY)"
+            value="${escapeHTML(getNasaApiKey() === 'DEMO_KEY' ? '' : getNasaApiKey())}"
+            data-api-key-input
+          />
+          <button type="button" class="button button-primary" data-action="save-api-key">Save Key</button>
+          <button type="button" class="button button-quiet" data-action="clear-api-key">Use DEMO_KEY</button>
+          <button type="button" class="button button-quiet" data-action="test-api-key">Test Connection</button>
+          <button type="button" class="button button-quiet" data-action="clear-cache">Clear Data Cache</button>
+        </div>
+
+        <div class="explorer-callout callout-amber" style="margin-top: 12px;">
+          <strong>BROWSER-SIDE SECURITY & TRANSPARENCY DISCLOSURE:</strong>
+          LunarBase is a static web application running directly in your web browser. Any API key entered here is stored in browser <code>localStorage</code> and transmitted directly to <code>api.nasa.gov</code>.
+          Browser-side keys are visible to anyone inspecting web developer tools. Never enter a sensitive, private, or production cloud credential.
+        </div>
+      </section>
     `;
   }
 
@@ -1265,7 +1437,7 @@ export function createApp(root) {
         <section class="panel"><p class="eyebrow">03 · COMPARE</p><h2>Reproducible scenario schedule</h2><p class="body-copy">A stored mission seed selects a reproducible order of scripted scenarios, so a saved mission replays consistently while a new mission can present a different event sequence. This is not a probability model, environmental forecast, or live feed.</p></section>
         <section class="panel"><p class="eyebrow">04 · LIMITATIONS</p><h2>Not for real mission planning</h2><p class="body-copy">The model omits detailed orbital geometry, habitat shielding, resource processing chemistry, individual medical variability, and certified equipment specifications. Consult verified technical sources for real decisions.</p></section>
       </div>
-      <section class="panel help-links"><div class="section-heading"><div><p class="eyebrow">LEARN MORE ABOUT THIS BUILD</p><h2>Transparency and assumptions</h2></div><button class="button button-primary" type="button" data-page="data-source">Open data model <span aria-hidden="true">→</span></button></div><p class="body-copy">No NASA API response, dataset name, or live measurement is represented in the application.</p></section>
+      <section class="panel help-links"><div class="section-heading"><div><p class="eyebrow">LEARN MORE ABOUT THIS BUILD</p><h2>Transparency and assumptions</h2></div><button class="button button-primary" type="button" data-page="data-source">Open data model <span aria-hidden="true">→</span></button></div><p class="body-copy">The core mission survival loop uses documented educational simulation assumptions. Verified NASA open data (DONKI space weather events, OSDR space biology experiments, and RadLab lunar surface dosimetry benchmarks) are integrated in the NASA Explorer for scientific context and educational discovery.</p></section>
     `;
   }
 
@@ -1410,6 +1582,26 @@ export function createApp(root) {
       return;
     }
 
+    const explorerTabBtn = target.closest?.('[data-explorer-tab]');
+    if (explorerTabBtn) {
+      appState.explorerTab = explorerTabBtn.dataset.explorerTab;
+      render();
+      return;
+    }
+
+    const targetTabBtn = target.closest?.('[data-explorer-target-tab]');
+    if (targetTabBtn) {
+      appState.explorerTab = targetTabBtn.dataset.explorerTargetTab;
+      navigate('nasa-explorer');
+      return;
+    }
+
+    const osdrTagBtn = target.closest?.('[data-osdr-tag]');
+    if (osdrTagBtn) {
+      triggerOsdrSearch(osdrTagBtn.dataset.osdrTag);
+      return;
+    }
+
     const actionButton = target.closest?.('[data-action]');
     if (!actionButton) return;
     const { action } = actionButton.dataset;
@@ -1448,6 +1640,52 @@ export function createApp(root) {
     } else if (action === 'apply-response') {
       const selectedResponse = root.querySelector('input[name="emergency-choice"]:checked')?.value ?? null;
       applyEmergencyResponse(selectedResponse);
+    } else if (action === 'fetch-donki') {
+      triggerDonkiFetch(true);
+    } else if (action === 'reset-donki') {
+      appState.donkiState.startDate = '2024-05-01';
+      appState.donkiState.endDate = '2024-05-20';
+      appState.donkiState.eventType = 'all';
+      appState.donkiState.data = {
+        flares: [...CURATED_DONKI_SPACE_WEATHER.flares],
+        cme: [...CURATED_DONKI_SPACE_WEATHER.cme],
+        sep: [...CURATED_DONKI_SPACE_WEATHER.sep],
+        geomagneticStorms: [...CURATED_DONKI_SPACE_WEATHER.geomagneticStorms],
+        dataSource: 'curated_nasa_archive'
+      };
+      setToast('Reset space weather display to May 2024 historic storm records.', 'info');
+      render();
+    } else if (action === 'search-osdr') {
+      const input = root.querySelector('[data-osdr-search-input]');
+      triggerOsdrSearch(input ? input.value : '');
+    } else if (action === 'save-api-key') {
+      const input = root.querySelector('[data-api-key-input]');
+      const key = input ? input.value.trim() : '';
+      setNasaApiKey(key);
+      appState.donkiState.apiKeyType = key && key !== 'DEMO_KEY' ? 'CUSTOM_KEY' : 'DEMO_KEY';
+      setToast('NASA API key configuration saved in this browser.', 'success');
+      render();
+    } else if (action === 'clear-api-key') {
+      setNasaApiKey('');
+      appState.donkiState.apiKeyType = 'DEMO_KEY';
+      setToast('Custom API key removed. Reverted to DEMO_KEY.', 'info');
+      render();
+    } else if (action === 'clear-cache') {
+      clearAllNasaCache();
+      setToast('All cached NASA datasets have been cleared.', 'info');
+      render();
+    } else if (action === 'test-api-key') {
+      const key = getNasaApiKey();
+      setToast(`Testing connection to api.nasa.gov with key "${key.slice(0, 4)}..."`, 'info');
+      fetchJson(`https://api.nasa.gov/DONKI/FLR?startDate=2024-05-10&endDate=2024-05-11&api_key=${encodeURIComponent(key)}`, { timeoutMs: 5000 })
+        .then(() => {
+          setToast('✓ NASA API connection successful! Key is valid and active.', 'success');
+          render();
+        })
+        .catch((err) => {
+          setToast(`NASA API test result: ${err.message}`, 'error');
+          render();
+        });
     } else if (action === 'dismiss-toast') {
       setToast('');
       render();
@@ -1455,7 +1693,10 @@ export function createApp(root) {
   });
 
   root.addEventListener('change', (event) => {
-    if (event.target.matches('input[name="daily-decision"]')) {
+    if (event.target.matches('[data-donki-filter]')) {
+      appState.donkiState.eventType = event.target.value;
+      render();
+    } else if (event.target.matches('input[name="daily-decision"]')) {
       appState.selectedDecision = event.target.value;
       root.querySelectorAll('.decision-choice').forEach((choice) => choice.classList.toggle(
         'selected',
@@ -1496,6 +1737,9 @@ export function createApp(root) {
     if (event.key === 'Escape' && appState.drawerOpen) {
       appState.drawerOpen = false;
       render();
+    } else if (event.key === 'Enter' && event.target.matches('[data-osdr-search-input]')) {
+      event.preventDefault();
+      triggerOsdrSearch(event.target.value);
     }
   });
 

@@ -1,0 +1,334 @@
+{
+  "executionDate": "2026-11-14T09:36:52.836Z",
+  "browser": "Google Chrome 157.0.8103.51 (Headless New)",
+  "interactiveVerificationStatus": "100% PASS",
+  "interactiveTestsExecuted": [
+    {
+      "testId": "route_oxygen",
+      "route": "#oxygen",
+      "expected": "Oxygen details render with 588 L/day rate",
+      "actual": "Verified in real Chrome",
+      "status": "PASS"
+    },
+    {
+      "testId": "route_water",
+      "route": "#water",
+      "expected": "Water details render with 3.5 L/day gross rate",
+      "actual": "Verified in real Chrome",
+      "status": "PASS"
+    },
+    {
+      "testId": "route_food",
+      "route": "#food",
+      "expected": "Food details render with 0.62 kg/day rate",
+      "actual": "Verified in real Chrome",
+      "status": "PASS"
+    },
+    {
+      "testId": "route_power",
+      "route": "#power",
+      "expected": "Power details render with 104.6 kWh/day solar rate",
+      "actual": "Verified in real Chrome",
+      "status": "PASS"
+    },
+    {
+      "testId": "route_surface",
+      "route": "#surface",
+      "expected": "Surface conditions and Diviner thermal metrics render",
+      "actual": "Verified in real Chrome",
+      "status": "PASS"
+    },
+    {
+      "testId": "route_sunlight",
+      "route": "#sunlight",
+      "expected": "Sunlight conditions and SVS 5027 illumination metrics render",
+      "actual": "Verified in real Chrome",
+      "status": "PASS"
+    },
+    {
+      "testId": "route_mission_log",
+      "route": "#mission-log",
+      "expected": "Flight Director log history table renders",
+      "actual": "Verified in real Chrome",
+      "status": "PASS"
+    },
+    {
+      "testId": "route_analytics",
+      "route": "#analytics",
+      "expected": "Reserve history chart and day-by-day table render",
+      "actual": "Verified in real Chrome",
+      "status": "PASS"
+    },
+    {
+      "testId": "route_habitat",
+      "route": "#habitat",
+      "expected": "Habitat telemetry and subsystem cards render",
+      "actual": "Verified in real Chrome",
+      "status": "PASS"
+    },
+    {
+      "testId": "route_setup",
+      "route": "#setup",
+      "expected": "Mission setup form renders with 1-7 days bounds",
+      "actual": "Verified in real Chrome",
+      "status": "PASS"
+    },
+    {
+      "testId": "route_help",
+      "route": "#help",
+      "expected": "Field manual and educational help cards render",
+      "actual": "Verified in real Chrome",
+      "status": "PASS"
+    },
+    {
+      "testId": "tab_donki",
+      "route": "#nasa-explorer (DONKI)",
+      "expected": "Space Weather events render with flare classification",
+      "actual": "Verified in real Chrome",
+      "status": "PASS"
+    },
+    {
+      "testId": "tab_osdr",
+      "route": "#nasa-explorer (OSDR)",
+      "expected": "OSDR flight biology studies render (OSD-379, OS-452, OSD-665, OSD-566, OSD-120)",
+      "actual": "Verified in real Chrome",
+      "status": "PASS"
+    },
+    {
+      "testId": "tab_radlab",
+      "route": "#nasa-explorer (RadLab)",
+      "expected": "RadLab table renders with Zhang et al. 2020 LND and SI units",
+      "actual": "Verified in real Chrome",
+      "status": "PASS"
+    },
+    {
+      "testId": "tab_surface",
+      "route": "#nasa-explorer (Surface)",
+      "expected": "LRO Diviner midnight mosaic and SVS 5027 render",
+      "actual": "Verified in real Chrome",
+      "status": "PASS"
+    },
+    {
+      "testId": "tab_provenance",
+      "route": "#nasa-explorer (Provenance)",
+      "expected": "4-tier provenance cards render",
+      "actual": "Verified in real Chrome",
+      "status": "PASS"
+    },
+    {
+      "testId": "field_guide_link",
+      "route": "#radiation -> #nasa-explorer",
+      "expected": "Link on Field Guide navigates to RadLab tab",
+      "actual": "Verified in real Chrome",
+      "status": "PASS"
+    },
+    {
+      "testId": "turn_decision_selection",
+      "route": "#dashboard",
+      "expected": "Operational decision radio button activates",
+      "actual": "Verified in real Chrome",
+      "status": "PASS"
+    },
+    {
+      "testId": "turn_advance_step",
+      "route": "#dashboard",
+      "expected": "Advance step triggers operations stage without resource drain",
+      "actual": "Verified in real Chrome",
+      "status": "PASS"
+    },
+    {
+      "testId": "turn_advance_day",
+      "route": "#dashboard",
+      "expected": "Advance day advances calendar from Day 1 to Day 2",
+      "actual": "Verified in real Chrome",
+      "status": "PASS"
+    },
+    {
+      "testId": "emergency_resolution",
+      "route": "#emergencies",
+      "expected": "Emergency procedure selected and applied cleanly",
+      "actual": "Verified in real Chrome",
+      "status": "PASS"
+    },
+    {
+      "testId": "persistence_save",
+      "route": "#settings",
+      "expected": "Mission state saved to browser localStorage",
+      "actual": "Verified in real Chrome",
+      "status": "PASS"
+    },
+    {
+      "testId": "persistence_restore",
+      "route": "#settings",
+      "expected": "Mission state reloaded from browser localStorage",
+      "actual": "Verified in real Chrome",
+      "status": "PASS"
+    },
+    {
+      "testId": "modal_dialog_lifecycle",
+      "route": "#settings",
+      "expected": "Reset confirmation modal opens (role=dialog) and closes on cancel",
+      "actual": "Verified in real Chrome",
+      "status": "PASS"
+    },
+    {
+      "testId": "runtime_console_errors",
+      "route": "global",
+      "expected": "Zero unhandled browser runtime errors or unhandled promise rejections",
+      "actual": "0 unhandled errors recorded",
+      "status": "PASS"
+    }
+  ],
+  "newScreenshotsCaptured": [
+    {
+      "id": "desktop_1920_oxygen",
+      "w": 1920,
+      "h": 1080,
+      "hash": "#oxygen",
+      "label": "Large Desktop — Oxygen Resource Management",
+      "size": 649663,
+      "file": "desktop_1920_oxygen.png",
+      "status": "PASS"
+    },
+    {
+      "id": "desktop_1920_water",
+      "w": 1920,
+      "h": 1080,
+      "hash": "#water",
+      "label": "Large Desktop — Water Resource Management",
+      "size": 645959,
+      "file": "desktop_1920_water.png",
+      "status": "PASS"
+    },
+    {
+      "id": "desktop_1920_food",
+      "w": 1920,
+      "h": 1080,
+      "hash": "#food",
+      "label": "Large Desktop — Food Resource Management",
+      "size": 647660,
+      "file": "desktop_1920_food.png",
+      "status": "PASS"
+    },
+    {
+      "id": "desktop_1920_power",
+      "w": 1920,
+      "h": 1080,
+      "hash": "#power",
+      "label": "Large Desktop — Power Resource Management",
+      "size": 810192,
+      "file": "desktop_1920_power.png",
+      "status": "PASS"
+    },
+    {
+      "id": "desktop_1920_surface",
+      "w": 1920,
+      "h": 1080,
+      "hash": "#surface",
+      "label": "Large Desktop — Surface Conditions",
+      "size": 1147629,
+      "file": "desktop_1920_surface.png",
+      "status": "PASS"
+    },
+    {
+      "id": "desktop_1920_sunlight",
+      "w": 1920,
+      "h": 1080,
+      "hash": "#sunlight",
+      "label": "Large Desktop — Sunlight Conditions",
+      "size": 1149715,
+      "file": "desktop_1920_sunlight.png",
+      "status": "PASS"
+    },
+    {
+      "id": "desktop_1920_mission_log",
+      "w": 1920,
+      "h": 1080,
+      "hash": "#mission-log",
+      "label": "Large Desktop — Mission Event Log",
+      "size": 386643,
+      "file": "desktop_1920_mission_log.png",
+      "status": "PASS"
+    },
+    {
+      "id": "desktop_1920_analytics",
+      "w": 1920,
+      "h": 1080,
+      "hash": "#analytics",
+      "label": "Large Desktop — Mission Analytics & Historical Reserves",
+      "size": 520617,
+      "file": "desktop_1920_analytics.png",
+      "status": "PASS"
+    },
+    {
+      "id": "desktop_1920_habitat",
+      "w": 1920,
+      "h": 1080,
+      "hash": "#habitat",
+      "label": "Large Desktop — Habitat Subsystems Telemetry",
+      "size": 1336764,
+      "file": "desktop_1920_habitat.png",
+      "status": "PASS"
+    },
+    {
+      "id": "desktop_1920_setup",
+      "w": 1920,
+      "h": 1080,
+      "hash": "#setup",
+      "label": "Large Desktop — Mission Scenario Setup",
+      "size": 787279,
+      "file": "desktop_1920_setup.png",
+      "status": "PASS"
+    },
+    {
+      "id": "desktop_1920_help",
+      "w": 1920,
+      "h": 1080,
+      "hash": "#help",
+      "label": "Large Desktop — Junior Astronaut Field Manual & Help",
+      "size": 607662,
+      "file": "desktop_1920_help.png",
+      "status": "PASS"
+    },
+    {
+      "id": "laptop_1366_water",
+      "w": 1366,
+      "h": 768,
+      "hash": "#water",
+      "label": "Laptop (1366px) — Water Management Grid",
+      "size": 426012,
+      "file": "laptop_1366_water.png",
+      "status": "PASS"
+    },
+    {
+      "id": "tablet_768_radlab",
+      "w": 768,
+      "h": 1024,
+      "hash": "#radiation",
+      "label": "Tablet (768px) — Radiation Monitoring & Benchmark Table",
+      "size": 412318,
+      "file": "tablet_768_radlab.png",
+      "status": "PASS"
+    },
+    {
+      "id": "mobile_390_water",
+      "w": 390,
+      "h": 844,
+      "hash": "#water",
+      "label": "Mobile (390px) — Water Resource Card Stacking",
+      "size": 287741,
+      "file": "mobile_390_water.png",
+      "status": "PASS"
+    },
+    {
+      "id": "small_mobile_320_water",
+      "w": 320,
+      "h": 568,
+      "hash": "#water",
+      "label": "Small Mobile (320px) — Compact Water Meter",
+      "size": 190379,
+      "file": "small_mobile_320_water.png",
+      "status": "PASS"
+    }
+  ]
+}
